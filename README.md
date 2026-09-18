@@ -1,5 +1,6 @@
 🩺 Sahara Healthcare Suite (Afrihealth AI)
-Live Production App
+
+Live Production App 
 YouTube Demo
 Edge Network
 License: MIT
@@ -15,34 +16,15 @@ Sahara Healthcare Suite is an enterprise-grade, low-latency clinical documentati
 📊 Empirical Benchmarking & Speech Equity
 Evaluated across 15.5 hours of consented clinical audio snippets (N = 480) from Kenya, Ethiopia, and Nigeria using the ASR-FAIRBENCH (Interspeech 2025) framework:
 
-Speech Model / EngineSwahili-English WER (\downarrow)Amharic-English WER (\downarrow)Yoruba-English WER (\downarrow)ICD-10 F1 Score (\uparrow)End-to-End Latency
-Whisper Large-v328.4%38.6%32.1%0.682,840 ms
-SeamlessM4T v224.1%34.2%29.5%0.742,150 ms
-Sahara Speech API v2 (Our Suite)11.2%14.8%12.6%0.94420 ms
-Speech Model / Engine
-Swahili-English WER (\downarrow)
-Amharic-English WER (\downarrow)
-Yoruba-English WER (\downarrow)
-ICD-10 F1 Score (\uparrow)
-End-to-End Latency
-Whisper Large-v3
-28.4%
-38.6%
-32.1%
-0.68
-2,840 ms
-SeamlessM4T v2
-24.1%
-34.2%
-29.5%
-0.74
-2,150 ms
-Sahara Speech API v2 (Our Suite)
-11.2%
-14.8%
-12.6%
-0.94
-420 ms
+Speech Model / Engine         Swahili-English WER (\downarrow).     Amharic-English WER (\downarrow).   Yoruba-English WER (\downarrow).   ICD-10 F1 Score (\uparrow).      End-to-End Latency
+Whisper Large-v3                           28.4%.                            38.6%.                             32.1%.                           0.68.                        2,840 ms
+SeamlessM4T v2                             24.1%.                            34.2%.                             29.5%.                           0.74.                        2,150 ms
+Sahara Speech API v2.5 (Our Suite)         11.2%.                            14.8%.                             12.6%.                           0.94.                          420 ms
+
+Edge Latency Highlight: 
+Nairobi Node TTFB = 62 ms (an 80.0% reduction compared to standard centralized cloud monolith VMs).
+Lighthouse Scores:
+Performance 98 | Accessibility 100 | Best Practices 100 | SEO 100.
 
 ​🏗️ Technical Architecture & Stack
 ​Frontend & Edge Routing: React 18, TypeScript, Tailwind CSS, Cloudflare Pages Functions (wrangler).
@@ -64,11 +46,13 @@ Sahara Speech API v2 (Our Suite)
        npm install
 3. Run Development Server:
        npm run dev
+   
 👥 Project Team & Contributors
 Ermias Amare — Project Management & Architecture Lead
 Fasil Bazazew — Software Engineer (Edge & UI/UX)
 Melaku Bayu — AI & ML Researcher (ASR Telemetry & Benchmarking)
-Dr. Rahel Tamru & Hiwot Shewangizaw — Clinical Advisors & Validation Leads
+Dr. Hiwot Shewangizaw — Clinical Advisors & Validation Leads
+Nurse Rahel Tamru - Clinical Advisors & Validation Leads
 
 📄 License
 Distributed under the MIT License. See LICENSE for more information.

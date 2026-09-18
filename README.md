@@ -1,12 +1,12 @@
 🩺 Sahara Healthcare Suite (Afrihealth AI)
 
-Live Production App.
+Live Production App https://sahara-healthcare-suite.pages.dev/
 
-YouTube Demo.
+YouTube Demo https://youtu.be/47ldOyJxyPE?si=0qV7Q-lXgVUNb82Z
 
-Edge Network.
+Edge Network https://www.cloudflare.com/?hl=en-GB
 
-License: MIT.
+License: MIT
 
 
 Intron CodeSwitch Africa Health Challenge Finalist Submission.

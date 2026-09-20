@@ -4,65 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AfriHealth AI: Unified 3-in-1 Voice Care Suite</title>
-
-  <!-- Progressive Web App (PWA) Web Manifest via Data URI -->
   <link rel="manifest" href="data:application/manifest+json;utf8,%7B%22name%22%3A%22AfriHealth%20AI%20Voice%20Care%20Suite%22%2C%22short_name%22%3A%22AfriHealth%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23020617%22%2C%22theme_color%22%3A%22%2310b981%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fplacehold.co%2F192x192%2F10b981%2F020617%3Ftext%3DAfriHealth%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
   <meta name="theme-color" content="#020617">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AfriHealth AI">
-
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Chart.js for Benchmarking Matrix -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
   <script>
     tailwind.config = {
       darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Plus Jakarta Sans', 'sans-serif'],
-          },
-          colors: {
-            brand: {
-              50: '#ecfdf5',
-              100: '#d1fae5',
-              500: '#10b981',
-              600: '#059669',
-              700: '#047857',
-              900: '#064e3b',
-            }
-          }
-        }
-      }
+      theme: { extend: { fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
+        colors: { brand: { 50: '#ecfdf5', 100: '#d1fae5', 500: '#10b981', 600: '#059669', 700: '#047857', 900: '#064e3b' } } } }
     }
   </script>
-
   <style>
-    /* Custom Scrollbar & Pulse Animation Defaults */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0f172a; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    .pulse-ring {
-      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-      animation: pulse-ring 1.5s infinite cubic-bezier(0.66, 0, 0, 1);
-    }
-    @keyframes pulse-ring {
-      to { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
-    }
+    .pulse-ring { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); animation: pulse-ring 1.5s infinite cubic-bezier(0.66, 0, 0, 1); }
+    @keyframes pulse-ring { to { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); } }
   </style>
 </head>
 <body class="h-full flex flex-col font-sans bg-slate-950 text-slate-100 overflow-x-hidden">
 
-  <!-- Top Navigation Header -->
   <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -76,7 +45,6 @@
           <p class="text-[11px] text-slate-400 hidden sm:block">Clinician-reviewed voice documentation for multilingual care teams</p>
         </div>
       </div>
-
       <div class="flex items-center gap-2">
         <button id="voice-toggle-btn" onclick="toggleVoiceOutput()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2">
           <i id="voice-toggle-icon" class="fa-solid fa-volume-high"></i> <span id="voice-toggle-label">AI Voice: On</span>
@@ -91,7 +59,6 @@
     </div>
   </header>
 
-  <!-- Interactive Navigation Tabs -->
   <nav class="bg-slate-900 border-b border-slate-800 px-4 sm:px-8 py-2.5">
     <div class="max-w-7xl mx-auto flex items-center justify-start gap-2 overflow-x-auto">
       <button id="tab-triage" onclick="switchTab('triage')" class="nav-tab text-emerald-400 bg-slate-800 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap border border-emerald-500/30">
@@ -109,7 +76,6 @@
     </div>
   </nav>
 
-  <!-- Interactive System Diagnostics Modal -->
   <div id="diagnostics-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -121,7 +87,6 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-
       <div class="space-y-3 text-xs">
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
@@ -133,7 +98,6 @@
           </div>
           <span id="diag-context-status" class="px-2.5 py-1 rounded font-mono font-bold bg-slate-900 text-slate-500">Checking...</span>
         </div>
-
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
             <i class="fa-solid fa-microphone text-teal-400 text-base"></i>
@@ -146,7 +110,6 @@
             Test Mic
           </button>
         </div>
-
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
             <i class="fa-solid fa-cloud text-indigo-400 text-base"></i>
@@ -159,7 +122,6 @@
             Ping API
           </button>
         </div>
-
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
             <i class="fa-solid fa-volume-high text-purple-400 text-base"></i>
@@ -172,7 +134,6 @@
             Test Voice
           </button>
         </div>
-
         <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
             <i class="fa-solid fa-notes-medical text-amber-400 text-base"></i>
@@ -184,7 +145,6 @@
           <span class="px-2.5 py-1 rounded font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Connected</span>
         </div>
       </div>
-
       <div class="pt-2 border-t border-slate-800 flex justify-end">
         <button onclick="closeModal('diagnostics-modal')" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-lg transition text-xs">
           Save & Return
@@ -193,10 +153,8 @@
     </div>
   </div>
 
-  <!-- Main Application Body -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 gap-6">
 
-    <!-- MODULE 1: FRONTLINE COMMUNITY TRIAGE AGENT -->
     <section id="sec-triage" class="tab-content block space-y-6">
       <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-800/80 pb-4">
@@ -212,13 +170,10 @@
             <span class="text-xs text-slate-400 ml-3"><i class="fa-solid fa-language text-emerald-400"></i> Mode: <b class="text-white">Amharic-English Code-Switch</b></span>
           </div>
         </div>
-
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <!-- Audio Input Selection -->
           <div class="lg:col-span-5 bg-slate-950 rounded-xl p-5 border border-slate-800 flex flex-col justify-between">
             <div>
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4"><i class="fa-solid fa-microphone"></i> Select Clinical Audio Preset or Record Live</h3>
-
               <div class="space-y-3 mb-5">
                 <button onclick="loadTriagePreset(1)" class="w-full text-left p-3 rounded-lg border border-slate-800 hover:border-emerald-500/50 bg-slate-900 transition flex items-center justify-between group">
                   <div>
@@ -227,7 +182,6 @@
                   </div>
                   <i class="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-emerald-400"></i>
                 </button>
-
                 <button onclick="loadTriagePreset(2)" class="w-full text-left p-3 rounded-lg border border-slate-800 hover:border-emerald-500/50 bg-slate-900 transition flex items-center justify-between group">
                   <div>
                     <div class="text-xs font-semibold text-yellow-400 group-hover:text-yellow-300">GOLD-ETH-002: Moderate Dehydration & Diarrhea</div>
@@ -235,7 +189,6 @@
                   </div>
                   <i class="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-emerald-400"></i>
                 </button>
-
                 <button onclick="loadTriagePreset(3)" class="w-full text-left p-3 rounded-lg border border-slate-800 hover:border-emerald-500/50 bg-slate-900 transition flex items-center justify-between group">
                   <div>
                     <div class="text-xs font-semibold text-red-400 group-hover:text-red-300">GOLD-ETH-003: Acute Respiratory Distress</div>
@@ -245,8 +198,6 @@
                 </button>
               </div>
             </div>
-
-            <!-- Live Mic Visualizer Control -->
             <div class="p-4 bg-slate-900 rounded-lg border border-slate-800 text-center">
               <div id="mic-status" class="text-xs text-slate-400 mb-2">Ready to record or run pre-loaded sample</div>
               <div class="flex items-center justify-center gap-3">
@@ -276,12 +227,9 @@
                 <audio id="saved-recording-player" class="w-full" controls></audio>
                 <a id="download-saved-recording" class="inline-block mt-2 text-xs text-indigo-300 hover:text-indigo-200" download="sahara-recording.webm">Download local copy</a>
               </div>
-
-              <!-- Real-time audio waveform canvas -->
               <div class="mt-3 bg-slate-950 p-2 rounded-lg border border-slate-800 flex items-center justify-between">
                 <canvas id="audio-wave-canvas" class="w-full h-8 rounded bg-slate-900"></canvas>
               </div>
-
               <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
                 <div id="mic-progress" class="bg-emerald-400 h-full w-0 transition-all duration-300"></div>
               </div>
@@ -290,21 +238,16 @@
               </div>
             </div>
           </div>
-
-          <!-- Real-Time Speech Processing Output -->
           <div class="lg:col-span-7 space-y-4">
-            <!-- Transcription Panel -->
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-file-audio text-emerald-400"></i> Intron Sahara v2.5 Code-Switched ASR Stream</span>
-                <span id="asr-confidence" class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confidence: unavailable</span>
+                <span id="asr-confidence" class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confidence: --%</span>
               </div>
               <div id="triage-transcript" class="p-3 bg-slate-900 rounded-lg border border-slate-800/80 text-sm font-mono text-slate-200 min-h-[90px] leading-relaxed">
                 <span class="text-slate-500 italic">Click a preset above or tap the microphone to begin code-switched speech recognition...</span>
               </div>
             </div>
-
-            <!-- Agentic Symptom & Risk Output -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
                 <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-tags text-teal-400"></i> Extracted Medical Entities</h4>
@@ -312,7 +255,6 @@
                   <span class="text-xs text-slate-500 italic">Awaiting audio processing...</span>
                 </div>
               </div>
-
               <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
                 <div>
                   <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-triangle-exclamation text-yellow-400"></i> Triage Classification</h4>
@@ -333,7 +275,6 @@
       </div>
     </section>
 
-    <!-- MODULE 2: VOICE INTAKE & EHR INTEGRATION -->
     <section id="sec-ehr" class="tab-content hidden space-y-6">
       <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-800/80 pb-4">
@@ -348,12 +289,10 @@
             <i class="fa-solid fa-bolt text-yellow-400"></i> Load Consultation Demo
           </button>
         </div>
-
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div class="lg:col-span-6 space-y-4">
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-headset text-teal-400"></i> Doctor-Patient Code-Switched Conversation</h3>
-
               <div class="flex items-center gap-2 mb-3">
                 <button id="btn-ehr-record" onclick="toggleEHRRecording()" class="h-10 px-4 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition">
                   <i class="fa-solid fa-microphone"></i> Start Consultation Recording
@@ -361,13 +300,11 @@
                 <span id="ehr-live-badge" class="text-[10px] text-slate-500 font-mono">Idle</span>
               </div>
               <p id="ehr-record-status" class="text-[11px] text-slate-500 mb-3">Record the live doctor-patient conversation; the chart on the right auto-fills as fields are recognized.</p>
-
               <div id="ehr-transcript-box" class="p-4 bg-slate-900 rounded-lg border border-slate-800 text-xs font-mono leading-relaxed space-y-2 h-[260px] overflow-y-auto text-slate-300">
                 <p class="text-slate-500 italic">Click "Start Consultation Recording" to capture live audio, or "Load Consultation Demo" for a scripted example...</p>
               </div>
               <p class="text-[10px] text-amber-400/80 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Auto-extracted fields require clinician verification before committing to EHR.</p>
             </div>
-
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center justify-between">
               <div>
                 <div class="text-xs font-bold text-white">Target Standard: HL7 FHIR v4.0.1</div>
@@ -378,8 +315,6 @@
               </button>
             </div>
           </div>
-
-          <!-- Structured Medical Chart -->
           <div class="lg:col-span-6 bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
             <div class="flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-file-medical text-emerald-400"></i> Auto-Filled EHR Medical Chart</h3>
@@ -392,7 +327,6 @@
                 </button>
               </div>
             </div>
-
             <div class="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label class="text-slate-500 block mb-1">Chief Complaint</label>
@@ -403,7 +337,6 @@
                 <input id="ehr-duration" type="text" readonly class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 font-medium" placeholder="Auto-extracting...">
               </div>
             </div>
-
             <div class="grid grid-cols-3 gap-3 text-xs">
               <div>
                 <label class="text-slate-500 block mb-1">BP (mmHg)</label>
@@ -418,12 +351,10 @@
                 <input id="ehr-temp" type="text" readonly class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 font-medium" placeholder="--">
               </div>
             </div>
-
             <div>
               <label class="text-slate-500 text-xs block mb-1">Prescribed Medications & Dosage</label>
               <textarea id="ehr-meds" readonly rows="2" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 text-xs font-mono" placeholder="Prescription details will appear here..."></textarea>
             </div>
-
             <div>
               <label class="text-slate-500 text-xs block mb-1">ICD-10 Clinical Diagnosis Suggestion</label>
               <div id="ehr-icd" class="p-2 bg-slate-900 border border-slate-800 rounded text-xs font-semibold text-emerald-400">
@@ -435,7 +366,6 @@
       </div>
     </section>
 
-    <!-- MODULE 3: POST-CARE FOLLOW-UP AGENT -->
     <section id="sec-followup" class="tab-content hidden space-y-6">
       <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-800/80 pb-4">
@@ -457,7 +387,6 @@
           <div class="lg:col-span-5 bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4 flex flex-col justify-between">
             <div>
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3"><i class="fa-solid fa-phone-volume text-indigo-400"></i> Outpatient Call Simulator</h3>
-
               <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2 mb-4">
                 <div class="flex justify-between text-xs">
                   <span class="text-slate-400">Patient:</span>
@@ -472,7 +401,6 @@
                   <span class="text-emerald-400 font-semibold">Amharic-English Code-Switch</span>
                 </div>
               </div>
-
               <div class="space-y-2">
                 <button onclick="runFollowUpSimulation('stable')" class="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-emerald-500/30 rounded-lg text-xs font-semibold text-emerald-400 text-left flex items-center justify-between transition">
                   <span>Simulate: Normal Recovery Response</span>
@@ -485,7 +413,59 @@
               </div>
             </div>
 
-            <!-- Call Display Box -->
+            <!-- NEW: Live Post-Care Protocol Analyzer (Dr. Basiel Annex 1-3) -->
+            <div class="p-4 bg-slate-950 rounded-xl border border-indigo-500/30 space-y-3">
+              <h3 class="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-clipboard-check text-indigo-400"></i> Live Post-Care Protocol Analyzer
+              </h3>
+              <p class="text-[10px] text-slate-500">Runs the clinical team's post-care protocol on real transcript text: recovery risk scoring plus, for maternal patients, the 5-level obstetric acuity scale (Annex 1-3).</p>
+              <textarea id="postcare-transcript-input" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-indigo-500 focus:outline-none" placeholder="Type or paste a check-in transcript, e.g. 'active vaginal bleeding and severe pain'..."></textarea>
+              <div class="flex items-center gap-2">
+                <label class="text-[11px] text-slate-400">Care track</label>
+                <select id="postcare-care-track" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                  <option value="general">General</option>
+                  <option value="maternal">Maternal (Annex 1-3 acuity scale)</option>
+                </select>
+                <button onclick="analyzePostCareTranscript()" class="ml-auto bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-2">
+                  <i class="fa-solid fa-magnifying-glass-chart"></i> Analyze
+                </button>
+              </div>
+              <div id="postcare-result-panel" class="hidden space-y-2 pt-2 border-t border-slate-800">
+                <div id="postcare-acuity-banner" class="hidden p-2.5 rounded-lg border text-[11px] font-semibold"></div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span id="postcare-risk-badge" class="text-[11px] font-bold px-2.5 py-1 rounded-lg border"></span>
+                  <span id="postcare-nurse-badge" class="hidden text-[11px] font-bold px-2.5 py-1 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300">
+                    <i class="fa-solid fa-user-nurse mr-1"></i> Nurse escalation required
+                  </span>
+                </div>
+                <p id="postcare-indicators-text" class="text-[11px] text-slate-400"></p>
+                <p class="text-[10px] text-amber-400/80"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Decision support from reported symptoms only -- a nurse/doctor must confirm with real vitals and exam.</p>
+              </div>
+            </div>
+
+            <!-- NEW: Real multi-turn follow-up call (Intron STT + TTS, no LLM) -->
+            <div class="p-4 bg-slate-950 rounded-xl border border-emerald-500/30 space-y-3">
+              <h3 class="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-phone-volume text-emerald-400"></i> Real Voice Follow-up Call
+              </h3>
+              <p class="text-[10px] text-slate-500">Not a simulation: Intron speaks each question aloud, you answer by mic, Intron transcribes it, and the protocol engine decides the next question -- or escalates immediately if it hears an emergency. No LLM involved anywhere in this loop.</p>
+
+              <button onclick="startRealFollowupCall()" id="followup-real-start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-lg transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-play"></i> Start Real Follow-up Call
+              </button>
+
+              <div id="followup-real-active" class="hidden space-y-2">
+                <p id="followup-real-status" class="text-[11px] text-slate-400 font-semibold"></p>
+                <div id="followup-real-question" class="p-2.5 bg-slate-900 rounded-lg border border-slate-800 text-xs text-slate-200"></div>
+                <div id="followup-real-audio-player"></div>
+                <button onclick="toggleFollowupRecording()" id="followup-real-record-btn" class="hidden w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-microphone"></i> Record Answer
+                </button>
+                <div id="followup-real-log" class="text-[11px] text-slate-400 space-y-1 max-h-24 overflow-y-auto"></div>
+                <div id="followup-real-summary" class="hidden mt-2 p-2.5 rounded-lg border text-[11px] font-semibold"></div>
+              </div>
+            </div>
+
             <div id="call-box" class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
               <div class="w-12 h-12 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-2 text-lg">
                 <i id="call-icon" class="fa-solid fa-phone"></i>
@@ -495,7 +475,6 @@
             </div>
           </div>
 
-          <!-- Dynamic Dialogue & Escalation -->
           <div class="lg:col-span-7 space-y-4">
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-comments text-indigo-400"></i> Outbound Voice Interaction Transcript</h3>
@@ -503,7 +482,6 @@
                 <p class="text-slate-500 italic">Press a simulation button on the left to initiate the voice call...</p>
               </div>
             </div>
-
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
                 <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-heart-pulse text-red-400"></i> Parsed Status</h4>
@@ -512,7 +490,6 @@
                 </div>
                 <p id="followup-risk-desc" class="text-xs text-slate-400 mt-2">Recovery status is parsed from code-switched transcript in real time.</p>
               </div>
-
               <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
                 <div>
                   <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-user-nurse text-emerald-400"></i> Escalation Queue</h4>
@@ -528,189 +505,110 @@
       </div>
     </section>
 
-    <!-- MODULE 4: BENCHMARK & VALIDATION EVIDENCE -->
     <section id="sec-benchmark" class="tab-content hidden space-y-6">
-      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800/80 pb-4">
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-800/80 pb-4">
           <div>
             <div class="flex items-center gap-2">
-              <span class="bg-emerald-500/15 text-emerald-400 text-xs px-2.5 py-1 rounded-md font-bold">EVIDENCE REVIEW</span>
-              <h2 class="text-xl font-bold text-white">ASR Benchmark & Clinical Validation</h2>
+              <span class="bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-md font-bold">EVIDENCE REVIEW</span>
+              <h2 class="text-xl font-bold text-white">ASR Benchmark and Clinical Validation</h2>
             </div>
-            <p class="text-sm text-slate-400 mt-1">Three clearly separated evidence layers: official Intron MultiBench results, AfriHealth clinical validation, and live local audio comparison.</p>
+            <p class="text-sm text-slate-400 mt-1">The matrix below is a fixture/demo view. It is not a real model ranking; use the measured validation summary and linked reports for performance claims.</p>
           </div>
-          <a href="https://github.com/intron-innovation/Intron-Multimodal-Benchmarking" target="_blank" rel="noopener noreferrer"
-             class="bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold px-3 py-2 rounded-lg border border-teal-500/30 transition flex items-center gap-2">
-            <i class="fa-brands fa-github"></i> Official Intron Benchmark
-          </a>
-        </div>
-
-        <!-- 1. OFFICIAL INTRON MULTIBENCH REFERENCE -->
-        <div class="bg-slate-950 p-5 rounded-xl border border-emerald-500/25 space-y-4">
-          <div class="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-1 rounded font-bold border border-emerald-500/20">LAYER 1</span>
-                <h3 class="text-sm font-bold text-white">Official Intron AfriHealth MultiBench — Amharic ASR</h3>
-              </div>
-              <p class="text-xs text-slate-400 mt-1">Published benchmark reference. These figures are not generated by this application.</p>
-            </div>
-            <span class="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded font-mono">OFFICIAL REFERENCE</span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <div class="text-[10px] text-slate-500 uppercase tracking-wider">Benchmark scale</div>
-              <div class="text-lg font-extrabold text-white mt-1">3,200</div>
-              <div class="text-[11px] text-slate-400">transcription instances</div>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <div class="text-[10px] text-slate-500 uppercase tracking-wider">Audio</div>
-              <div class="text-lg font-extrabold text-white mt-1">~10 hrs</div>
-              <div class="text-[11px] text-slate-400">~250 speakers</div>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <div class="text-[10px] text-slate-500 uppercase tracking-wider">Amharic Sahara</div>
-              <div class="text-lg font-extrabold text-emerald-400 mt-1">32.6% WER</div>
-              <div class="text-[11px] text-slate-400">12.9% normalized CER</div>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr class="border-b border-slate-800 text-slate-400">
-                  <th class="py-2.5">Model</th>
-                  <th class="py-2.5">Normalized WER ↓</th>
-                  <th class="py-2.5">Normalized CER ↓</th>
-                  <th class="py-2.5">Source</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-800/60 font-mono">
-                <tr><td class="py-2.5 text-emerald-400 font-bold">Intron Sahara</td><td class="py-2.5">32.6%</td><td class="py-2.5">12.9%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">OmniLLM</td><td class="py-2.5">37.1%</td><td class="py-2.5">14.5%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">Azure Speech</td><td class="py-2.5">41.6%</td><td class="py-2.5">16.4%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">Gemini Flash</td><td class="py-2.5">35.7%</td><td class="py-2.5">17.8%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">OmniCTC</td><td class="py-2.5">40.5%</td><td class="py-2.5">14.9%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">GPT-4o Transcribe</td><td class="py-2.5">85.4%</td><td class="py-2.5">57.6%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">Gemma4</td><td class="py-2.5">86.5%</td><td class="py-2.5">59.3%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-                <tr><td class="py-2.5 text-slate-300">Qwen3</td><td class="py-2.5">111.4%</td><td class="py-2.5">116.6%</td><td class="py-2.5 text-slate-500">Intron MultiBench</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/15 text-[11px] text-slate-400">
-            <i class="fa-solid fa-circle-info text-emerald-400 mr-1"></i>
-            Official benchmark methodology reports WER/CER per language and model and tracks latency alongside accuracy. WER/CER are lower-is-better metrics.
-            <a class="text-teal-300 hover:text-teal-200 ml-1" target="_blank" rel="noopener noreferrer" href="https://github.com/intron-innovation/Intron-Multimodal-Benchmarking">View repository →</a>
-          </div>
-        </div>
-
-        <!-- 2. AFRIHEALTH CLINICAL VALIDATION -->
-        <div class="bg-slate-950 p-5 rounded-xl border border-amber-500/25 space-y-4">
-          <div class="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="bg-amber-500/10 text-amber-300 text-[10px] px-2 py-1 rounded font-bold border border-amber-500/20">LAYER 2</span>
-                <h3 class="text-sm font-bold text-white">AfriHealth Clinical Validation</h3>
-              </div>
-              <p class="text-xs text-slate-400 mt-1">Project-level evidence from the reviewed Amharic-English validation set.</p>
-            </div>
-            <span class="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-300 px-2 py-1 rounded font-mono">PROJECT VALIDATION</span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="p-4 bg-slate-900 rounded-lg border border-slate-800"><div class="text-2xl font-extrabold text-white">15</div><div class="text-[11px] text-slate-400">reviewed Amharic-English recordings</div></div>
-            <div class="p-4 bg-slate-900 rounded-lg border border-slate-800"><div class="text-2xl font-extrabold text-amber-300">56.38%</div><div class="text-[11px] text-slate-400">mean WER reported by the project</div></div>
-            <div class="p-4 bg-slate-900 rounded-lg border border-slate-800"><div class="text-2xl font-extrabold text-red-300">6</div><div class="text-[11px] text-slate-400">critical-term-miss cases</div></div>
-          </div>
-
-          <div class="p-3 bg-amber-500/5 rounded-lg border border-amber-500/15 text-[11px] text-slate-400">
-            <i class="fa-solid fa-user-doctor text-amber-300 mr-1"></i>
-            This is AfriHealth's project validation, not the official MultiBench result. It is shown separately so the evidence sources cannot be conflated. Clinician review remains mandatory; autonomous care is not supported.
-          </div>
-        </div>
-
-        <!-- 3. LIVE LOCAL COMPARISON -->
-        <div class="bg-slate-950 p-5 rounded-xl border border-rose-500/25 space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-2 flex-wrap gap-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="bg-rose-500/10 text-rose-300 text-[10px] px-2 py-1 rounded font-bold border border-rose-500/20">LAYER 3</span>
-                <h3 class="text-sm font-bold text-white">Live Local Validation — Sahara vs Whisper Medium</h3>
-              </div>
-              <p class="text-xs text-slate-400 mt-1">Fresh audio uploaded by the evaluator. This is an application-level comparison, not an official MultiBench reproduction.</p>
-            </div>
-            <span class="text-[10px] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-2 py-1 rounded font-mono">MEASURED LIVE</span>
-          </div>
-          <p class="text-xs text-slate-400">Upload real audio and a verbatim reference transcript. The gateway runs both models and calculates WER/CER for that sample, plus inference latency.</p>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div class="space-y-3">
-              <div>
-                <label class="text-slate-400 block mb-1 font-semibold">Audio sample</label>
-                <input id="live-benchmark-file" type="file" accept="audio/*"
-                  class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 text-xs file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-800 file:text-emerald-400 file:text-xs" />
-              </div>
-              <div>
-                <label class="text-slate-400 block mb-1 font-semibold">Language code</label>
-                <select id="live-benchmark-language" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 focus:border-emerald-500 focus:outline-none">
-                  <option value="am-ET" selected>Amharic (am-ET)</option>
-                  <option value="om-ET">Afaan Oromoo (om-ET)</option>
-                  <option value="en">English (en)</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label class="text-slate-400 block mb-1 font-semibold">Reference verbatim transcript</label>
-              <textarea id="live-benchmark-reference" rows="5" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Type exactly what is said in the audio..."></textarea>
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between pt-1 flex-wrap gap-2">
-            <button id="live-benchmark-run" onclick="runLiveBackendBenchmark()" class="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2">
-              <i class="fa-solid fa-play"></i> Run Live Comparison
+          <div class="flex items-center gap-2">
+            <button onclick="toggleJsonInspector()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2 rounded-lg transition flex items-center gap-2 border border-slate-700">
+              <i class="fa-solid fa-code text-teal-400"></i> Inspect Gold JSON
             </button>
-            <span id="live-benchmark-status" class="text-xs text-slate-500"></span>
-          </div>
-
-          <div id="live-benchmark-results" class="hidden overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr class="border-b border-slate-800 text-slate-400">
-                  <th class="py-2">Model</th>
-                  <th class="py-2">WER</th>
-                  <th class="py-2">CER</th>
-                  <th class="py-2">Latency</th>
-                  <th class="py-2">Triage</th>
-                  <th class="py-2">Transcript</th>
-                </tr>
-              </thead>
-              <tbody id="live-benchmark-table-body" class="divide-y divide-slate-800/60 font-mono"></tbody>
-            </table>
-            <p id="live-benchmark-agreement" class="text-xs text-slate-400 mt-2"></p>
+            <button onclick="recalculateBenchmarkScores()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2 shadow-lg shadow-emerald-500/20">
+              <i class="fa-solid fa-rotate text-slate-950"></i> Re-Calculate
+            </button>
           </div>
         </div>
-
-        <!-- Manual WER/CER sanity check -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-xs text-amber-100">
+            <h3 class="font-bold text-amber-300 mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Fixture benchmark limitation</h3>
+            <p>The displayed matrix uses embedded hypotheses and illustrative case values. Its 0% WER-style result is reproducible as a software fixture, but it is not independent audio inference or proof of production superiority. The "All Cases" row is calculated live as the average of the four per-case rows below, not a separately hardcoded figure.</p>
+          </div>
+          <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-xs text-red-100">
+            <h3 class="font-bold text-red-300 mb-2"><i class="fa-solid fa-user-doctor mr-1"></i> Measured clinical validation</h3>
+            <p>15 reviewed Amharic-English recordings: <strong>56.38% mean WER</strong>, <strong>44.33% target-term recall</strong>, and <strong>6 critical-term-miss cases</strong>. Clinician review is mandatory; autonomous care is not supported.</p>
+          </div>
+        </div>
+        <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="flex items-center gap-3 w-full md:w-auto">
+            <label class="text-xs font-bold text-slate-400 uppercase whitespace-nowrap"><i class="fa-solid fa-database text-amber-400 mr-1"></i> Active Case Filter:</label>
+            <select id="benchmark-case-select" onchange="onCaseSelectChange()" class="w-full md:w-80 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold">
+              <option value="AGGREGATE">📊 ALL CASES: Aggregated Corpus Average (4 Samples)</option>
+              <option value="GOLD-ETH-001">GOLD-ETH-001: Pediatric High Fever & Severe Cough (ESI 2)</option>
+              <option value="GOLD-ETH-002">GOLD-ETH-002: Moderate Dehydration & Hypotension (ESI 3)</option>
+              <option value="GOLD-ETH-003">GOLD-ETH-003: Acute Chest Tightness & Dyspnea (ESI 1)</option>
+              <option value="GOLD-ETH-004">GOLD-ETH-004: Post-Op Appendectomy Wound Infection (ESI 2)</option>
+            </select>
+          </div>
+          <div id="case-summary-pills" class="flex items-center gap-2 flex-wrap text-xs">
+            <span class="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded text-slate-300"><i class="fa-solid fa-clock text-emerald-400 mr-1"></i> Duration: <b class="text-white">71.8s</b></span>
+            <span class="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded text-slate-300"><i class="fa-solid fa-language text-teal-400 mr-1"></i> Code-Switching: <b class="text-white">63.5% Amharic / 36.5% English</b></span>
+          </div>
+        </div>
+        <div id="json-inspector-panel" class="hidden bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <span class="text-xs font-bold text-slate-400 uppercase"><i class="fa-solid fa-file-code text-teal-400 mr-1"></i> Raw Ground-Truth JSON payload (<span id="inspector-sample-id">GOLD-ETH-001</span>)</span>
+            <button onclick="toggleJsonInspector()" class="text-slate-500 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i> Close</button>
+          </div>
+          <pre id="json-code-block" class="p-3 bg-slate-900 rounded-lg text-[11px] font-mono text-emerald-300 overflow-x-auto max-h-60 leading-tight"></pre>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-7 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-chart-column text-amber-400"></i> WER % vs CER % Comparison (Lower is Better)</h3>
+              <span id="chart-case-badge" class="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded font-mono">Aggregated Corpus</span>
+            </div>
+            <div class="h-64">
+              <canvas id="benchmarkChart"></canvas>
+            </div>
+          </div>
+          <div class="lg:col-span-5 bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+            <div>
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3"><i class="fa-solid fa-table text-teal-400"></i> Clinician Human-In-The-Loop (HITL) Scores</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="border-b border-slate-800 text-slate-400">
+                      <th class="py-2">Speech AI Model</th>
+                      <th class="py-2">WER</th>
+                      <th class="py-2">CER</th>
+                      <th class="py-2">Factuality</th>
+                      <th class="py-2">Safety</th>
+                    </tr>
+                  </thead>
+                  <tbody id="matrix-table-body" class="divide-y divide-slate-800/60 font-mono"></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="evaluator-comment-box" class="mt-4 p-3 bg-slate-900 rounded-lg border border-slate-800/80 text-xs space-y-1 text-slate-400">
+              <p class="font-semibold text-amber-400"><i class="fa-solid fa-user-doctor mr-1"></i> Clinician Review Notes:</p>
+              <p id="evaluator-comment-text" class="leading-relaxed">Intron Sahara v2.5 maintains accurate phonetic grounding for local disease descriptions without hallucinatory translations.</p>
+            </div>
+          </div>
+        </div>
         <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
           <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-calculator text-emerald-400 mr-1"></i> Local WER/CER Sanity Check</h3>
-            <span class="text-[11px] text-slate-500 font-mono">Formula: WER = edits / reference words</span>
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-calculator text-emerald-400 mr-1"></i> Live Levenshtein Edit-Distance Calculator</h3>
+            <span class="text-[11px] text-slate-500 font-mono">Formula: WER = (S + D + I) / N</span>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
-              <label class="text-slate-400 block mb-1 font-semibold">Reference</label>
+              <label class="text-slate-400 block mb-1 font-semibold">Reference Verbatim Ground Truth ($T_{gold}$)</label>
               <textarea id="calc-reference" rows="2" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Enter reference transcript...">Patient-u twin years የነበረ character severe cough and fever አለው for 3 days.</textarea>
             </div>
             <div>
-              <label class="text-slate-400 block mb-1 font-semibold">Hypothesis</label>
+              <label class="text-slate-400 block mb-1 font-semibold">Hypothesis ASR Model Output ($T_{hyp}$)</label>
               <textarea id="calc-hypothesis" rows="2" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Enter ASR output transcript...">Patient twin years የነበረ severe cough and fever ale for 3 days.</textarea>
             </div>
           </div>
           <div class="flex items-center justify-between pt-1">
             <button onclick="runLiveWerCalculation()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-2">
-              <i class="fa-solid fa-play"></i> Compute WER & CER
+              <i class="fa-solid fa-play"></i> Compute Exact WER & CER
             </button>
             <div id="calc-results" class="flex items-center gap-4 text-xs font-mono">
               <span class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded text-emerald-400 font-bold">Calculated WER: --%</span>
@@ -718,17 +616,11 @@
             </div>
           </div>
         </div>
-
-        <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 text-[11px] text-slate-500">
-          <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>
-          Evidence rule: official MultiBench figures are published reference data; clinical validation figures are project evidence; live comparison figures are generated from the evaluator's uploaded audio. These three layers are intentionally kept separate.
-        </div>
       </div>
     </section>
 
   </main>
 
-  <!-- Proposal Modal / Strategy Viewer -->
   <div id="proposal-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
       <div class="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900">
@@ -740,13 +632,11 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-
       <div class="p-6 overflow-y-auto space-y-6 text-xs sm:text-sm text-slate-300 leading-relaxed">
         <div class="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl text-emerald-300 space-y-2">
           <h4 class="font-bold text-base text-white"><i class="fa-solid fa-compass text-emerald-400"></i> Purpose and product direction</h4>
           <p><strong>AfriHealth AI</strong> is a clinician-reviewed voice documentation and decision-support workflow for community health teams working across English, Amharic-English, and Afaan Oromoo-English conversations.</p>
         </div>
-
         <div class="space-y-4">
           <h4 class="font-bold text-white text-sm uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-1">1. Product modules</h4>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -763,24 +653,18 @@
               <p class="text-slate-400 text-xs">Supports follow-up simulations and highlights possible escalation signals for human assessment.</p>
             </div>
           </div>
-
           <h4 class="font-bold text-white text-sm uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-1 mt-6">2. Evidence and governance</h4>
           <p>Fixture benchmark values, AfriSwitch general-ASR results, and the 15-case clinical-review baseline are shown as separate evidence layers. The measured clinical baseline is 56.38% mean WER, 44.33% target-term recall, and six critical-term-miss cases. These results require clinician review and do not support autonomous care.</p>
-
           <h4 class="font-bold text-white text-sm uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-1 mt-6">3. Privacy and safety</h4>
           <p>Provider credentials remain server-side. Recordings are reviewed before upload, private validation inputs remain outside Git, and medication suggestions are blocked until clinician confirmation and patient context are supplied.</p>
-
           <h4 class="font-bold text-white text-sm uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-1 mt-6">4. Project team</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div class="p-3 bg-slate-950 rounded-lg border border-slate-800"><strong class="text-white">Project owner</strong><br><span class="text-slate-400">Ermias Amare</span></div>
-            <div class="p-3 bg-slate-950 rounded-lg border border-slate-800"><strong class="text-white">Software Engineer</strong><br><span class="text-slate-400">Fasil Bazezew</span></div>
-
             <div class="p-3 bg-slate-950 rounded-lg border border-slate-800"><strong class="text-white">Clinical team</strong><br><span class="text-slate-400">Hiwot Shiwangezaw<br>Rahel Tamiru</span></div>
             <div class="p-3 bg-slate-950 rounded-lg border border-slate-800"><strong class="text-white">AI &amp; ML research</strong><br><span class="text-slate-400">Melaku Bayu</span></div>
           </div>
         </div>
       </div>
-
       <div class="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
         <button onclick="closeModal('proposal-modal')" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition">
           Close Strategy
@@ -789,7 +673,6 @@
     </div>
   </div>
 
-  <!-- Footer -->
   <footer class="border-t border-slate-800 bg-slate-950 py-4 px-6 text-center text-xs text-slate-500">
     AfriHealth AI &bull; Clinician-reviewed voice documentation &bull; Sahara Code-Switch Africa Challenge
   </footer>
@@ -1083,10 +966,6 @@
       }
     };
 
-    // The "All Cases" aggregate is computed live from the four per-case
-    // rows above (average WER/CER/factuality/safety per model) rather than
-    // being a separately hardcoded block, so it can never drift out of
-    // sync with the individual cases.
     (function buildAggregateFromCases() {
       const caseKeys = Object.keys(GOLD_STANDARD_DATASET);
       const numModels = GOLD_STANDARD_DATASET[caseKeys[0]].matrix.length;
@@ -1135,14 +1014,12 @@
       document.querySelectorAll('.nav-tab').forEach(btn => {
         btn.className = "nav-tab text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap border border-transparent";
       });
-
       const targetSec = document.getElementById('sec-' + tabId);
       const targetTab = document.getElementById('tab-' + tabId);
       if (targetSec) targetSec.classList.remove('hidden');
       if (targetTab) {
         targetTab.className = "nav-tab text-emerald-400 bg-slate-800 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap border border-emerald-500/30";
       }
-
       if (tabId === 'benchmark' && !benchmarkChartInstance) {
         initBenchmarkChart();
       }
@@ -1162,7 +1039,6 @@
       const isSecure = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
       const sub = document.getElementById('diag-context-sub');
       const status = document.getElementById('diag-context-status');
-
       if (sub && status) {
         if (isSecure) {
           sub.innerText = "Running in secure context (" + location.protocol + "//" + location.hostname + ")";
@@ -1182,7 +1058,6 @@
         if (sub) sub.innerText = "❌ MediaDevices API not supported in this browser environment.";
         return;
       }
-
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if (sub) sub.innerText = "✅ Microphone hardware authorized and active!";
@@ -1195,7 +1070,6 @@
  async function testIntronApiPing() {
   const sub = document.getElementById('diag-api-sub');
   if (sub) sub.innerText = "Pinging Sahara API ...";
-
   const startTime = Date.now();
   const apiOrigin = window.SAHARA_API_ORIGIN || (
     window.location.port === '8000'
@@ -1216,17 +1090,8 @@
   }
 }
 
-    // ---------------------------------------------------------------------
-    // AI VOICE "SPEAKING BACK" FEATURE
-    // Uses the browser's built-in speechSynthesis API so no extra backend
-    // dependency or API key is required. Amharic system voices are used
-    // automatically when the browser/OS provides one; otherwise it falls
-    // back to the best available English voice.
-    // ---------------------------------------------------------------------
     let voiceOutputEnabled = true;
     let cachedVoices = [];
-    let intronVoiceAudio = null;
-    let lastIntronTtsAudioUrl = null;
 
     function loadVoicesOnce() {
       if (!('speechSynthesis' in window)) return;
@@ -1246,61 +1111,27 @@
       return english || cachedVoices[0] || null;
     }
 
-    async function speakText(text, { lang = 'am', onstart, onend } = {}) {
+    function speakText(text, { lang = 'en-US', onstart, onend } = {}) {
       if (!voiceOutputEnabled || !text) return;
-      if (typeof onstart === 'function') onstart();
-      try {
-        const apiOrigin = resolveSaharaApiOrigin();
-        const response = await fetch(`${apiOrigin}/api/intron/tts/audio`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: String(text).slice(0, 4096),
-            voice_language: 'am',
-            voice_accent: 'amharic',
-            voice_gender: 'female'
-          })
-        });
-        if (!response.ok) {
-          let detail = '';
-          try {
-            const payload = await response.json();
-            detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail || payload);
-          } catch (_) {}
-          throw new Error(detail || `Intron TTS request failed (${response.status})`);
-        }
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        if (intronVoiceAudio) intronVoiceAudio.pause();
-        intronVoiceAudio = new Audio(audioUrl);
-        intronVoiceAudio.onended = () => { URL.revokeObjectURL(audioUrl); if (typeof onend === 'function') onend(); };
-        intronVoiceAudio.onerror = () => { URL.revokeObjectURL(audioUrl); if (typeof onend === 'function') onend(); };
-        lastIntronTtsAudioUrl = audioUrl;
-        await intronVoiceAudio.play();
-      } catch (error) {
-        console.error('Intron TTS failed:', error);
-        // Keep browser speech as a local fallback only when Intron TTS is unavailable.
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = lang === 'en-US' ? 'en-US' : 'am';
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          utterance.onend = onend;
-          utterance.onerror = onend;
-          window.speechSynthesis.speak(utterance);
-        } else if (typeof onend === 'function') {
-          onend();
-        }
+      if (!('speechSynthesis' in window)) {
+        if (onend) onend();
+        return;
       }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voice = pickVoice(lang);
+      if (voice) utterance.voice = voice;
+      utterance.lang = voice ? voice.lang : lang;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      if (onstart) utterance.onstart = onstart;
+      if (onend) { utterance.onend = onend; utterance.onerror = onend; }
+      window.speechSynthesis.speak(utterance);
     }
 
     function toggleVoiceOutput() {
       voiceOutputEnabled = !voiceOutputEnabled;
-      if (!voiceOutputEnabled) {
-        if (intronVoiceAudio) intronVoiceAudio.pause();
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      }
+      if (!voiceOutputEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
       const icon = document.getElementById('voice-toggle-icon');
       const label = document.getElementById('voice-toggle-label');
       if (icon) icon.className = voiceOutputEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
@@ -1313,7 +1144,7 @@
       const btn = document.getElementById('btn-speak-recommendation');
       if (btn) btn.disabled = !text;
       speakText(text, {
-        lang: 'am',
+        lang: 'en-US',
         onstart: () => setSpeakButtonState(true),
         onend: () => setSpeakButtonState(false)
       });
@@ -1330,12 +1161,16 @@
       if (lastRecommendationText) speakRecommendation(lastRecommendationText);
     }
 
-    async function testSpeechSynthesis() {
+    function testSpeechSynthesis() {
       const sub = document.getElementById('diag-tts-sub');
-      if (sub) sub.innerText = 'Generating Amharic voice through Intron...';
-      await speakText('አፍሪሄልዝ ኤይአይ የድምጽ ምላሽ ስርዓት እየሰራ ነው።', {
-        lang: 'am',
-        onend: () => { if (sub) sub.innerText = '✅ Intron Amharic TTS response completed.'; }
+      if (!('speechSynthesis' in window)) {
+        if (sub) sub.innerText = "❌ speechSynthesis is not supported in this browser.";
+        return;
+      }
+      if (sub) sub.innerText = "🔊 Playing test phrase...";
+      speakText("AfriHealth AI voice response system is online.", {
+        lang: 'en-US',
+        onend: () => { if (sub) sub.innerText = "✅ Speech synthesis is working."; }
       });
     }
 
@@ -1343,22 +1178,18 @@
       const caseId = `GOLD-ETH-00${presetNum}`;
       const caseData = GOLD_STANDARD_DATASET[caseId];
       if (!caseData) return;
-
       const transcriptEl = document.getElementById('triage-transcript');
       const confEl = document.getElementById('asr-confidence');
       const symptomsEl = document.getElementById('triage-symptoms');
       const badgeEl = document.getElementById('triage-level-badge');
       const recEl = document.getElementById('triage-recommendation');
-
       if (transcriptEl) transcriptEl.innerText = `"${caseData.json.code_switched_verbatim}"`;
       if (confEl) confEl.innerText = `Confidence: ${(96.2 + presetNum * 0.8).toFixed(1)}%`;
-
       if (symptomsEl) {
         symptomsEl.innerHTML = caseData.json.symptoms.map(s =>
           `<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-xs font-semibold"><i class="fa-solid fa-circle-check mr-1 text-[10px]"></i>${s}</span>`
         ).join('');
       }
-
       let recommendationText = "";
       if (badgeEl) {
         if (presetNum === 1) {
@@ -1372,7 +1203,6 @@
           badgeEl.innerText = "ESI LEVEL 1 - HIGH CRITICAL ALERT";
         }
       }
-
       if (presetNum === 1) {
         recommendationText = "Action: Immediate referral to Primary Health Care Center. Administer oral rehydration and antipyretic.";
       } else if (presetNum === 2) {
@@ -1388,7 +1218,6 @@
       const btn = document.getElementById('btn-triage-record');
       const status = document.getElementById('mic-status');
       const progress = document.getElementById('mic-progress');
-
       if (!isRecordingTriage) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1403,7 +1232,6 @@
           reviewAudioProcessor.connect(reviewAudioContext.destination);
           mediaRecorder = { stream, state: "recording", mimeType: "audio/wav" };
           await startAudioStreaming(websocket, stream);
-
           finishReviewRecording = () => {
             const sampleCount = reviewAudioBuffers.reduce((total, chunk) => total + chunk.length, 0);
             const samples = new Float32Array(sampleCount);
@@ -1443,7 +1271,6 @@
             if (progress) progress.style.width = "0%";
             if (status && !player) status.innerText = "Recording saved locally. Review it, then upload to Intron.";
           };
-
           isRecordingTriage = true;
           if (btn) btn.className = "w-14 h-14 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center text-xl font-bold shadow-lg transition animate-pulse";
           if (status) status.innerText = "Listening to code-switched audio stream...";
@@ -1470,23 +1297,6 @@
       }
     }
 
-    async function pollIntronFileStatus(apiOrigin, fileId, { intervalMs = 2500, maxAttempts = 24 } = {}) {
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        const response = await fetch(`${apiOrigin}/api/intron/stt/status/${encodeURIComponent(fileId)}`);
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.detail || payload.message || `Status lookup failed (${response.status})`);
-        }
-        const data = payload?.data;
-        if (data?.audio_transcript) return data.audio_transcript;
-        if (data?.processing_status === "FILE_PROCESSING_FAILED" || data?.processing_status === "FILE_FAILED" || data?.processing_status === "FAILED") {
-          throw new Error(payload.message || "Intron failed to process the audio file.");
-        }
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-      }
-      throw new Error("Intron is still processing the file. Please retry the upload/status check shortly.");
-    }
-
     async function uploadSavedRecording() {
       const status = document.getElementById("mic-status");
       const upload = document.getElementById("save-upload-recording");
@@ -1507,16 +1317,8 @@
       try {
         const response = await fetch(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
         const result = await response.json();
-        let transcript = result?.data?.audio_transcript || "";
-        if (response.status === 503) {
-          const detail = result?.detail || {};
-          const fileId = detail?.file_id || result?.file_id;
-          if (!fileId) throw new Error(detail?.message || "Intron timed out without returning a file_id.");
-          if (status) status.innerText = "Intron is still processing the recording; checking file status...";
-          transcript = await pollIntronFileStatus(apiOrigin, fileId);
-        } else if (!response.ok) {
-          throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
-        }
+        if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
+        const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
         if (transcript) {
           const target = document.getElementById("triage-transcript");
           if (target) target.innerText = transcript;
@@ -1541,17 +1343,14 @@
           <p><b class="text-teal-400">Doctor:</b> "Prescribing Amoxicillin 500mg and Paracetamol 500mg."</p>
         `;
       }
-
       document.getElementById('ehr-cc').value = "Chest Pain & Severe Headache";
       document.getElementById('ehr-duration').value = "2 Days";
       document.getElementById('ehr-bp').value = "140/90";
       document.getElementById('ehr-pulse').value = "88";
       document.getElementById('ehr-temp').value = "37.8";
       document.getElementById('ehr-meds').value = "1. Amoxicillin 500mg TID x 7 Days\n2. Paracetamol 500mg PRN for Fever";
-
       const icd = document.getElementById('ehr-icd');
       if (icd) icd.innerText = "ICD-10 Code: R07.9 (Unspecified Chest Pain) / Pyrexia R50.9";
-
       const syncBtn = document.getElementById('btn-sync-ehr');
       if (syncBtn) {
         syncBtn.disabled = false;
@@ -1571,17 +1370,6 @@
       }
     }
 
-    // ---------------------------------------------------------------------
-    // MODULE 2: LIVE CONSULTATION RECORDING -> AUTO-FILLED EHR CHART
-    //
-    // Two capture paths, chosen automatically:
-    //  A) Browser on-device speech recognition (SpeechRecognition), when
-    //     available (Chrome/Edge) -- transcribes live with no backend call,
-    //     and fields extract incrementally as the doctor/patient speak.
-    //  B) Fallback: record raw audio with MediaRecorder and send it to the
-    //     existing /api/intron/stt/upload-sync gateway route for
-    //     transcription, then run the same field extractor on the result.
-    // ---------------------------------------------------------------------
     let ehrRecognition = null;
     let ehrRecording = false;
     let ehrMediaRecorder = null;
@@ -1625,14 +1413,9 @@
       box.scrollTop = box.scrollHeight;
     }
 
-    // Scans the live/uploaded transcript for clinical fields and fills the
-    // chart on the right. Only overwrites a field when something new is
-    // actually found, so incremental live updates never blank out a field
-    // that was already captured earlier in the conversation.
     function extractEHRFields(text) {
       const raw = text || '';
       const lower = raw.toLowerCase();
-
       let chiefComplaint = null;
       let icdMatch = null;
       for (const entry of EHR_ICD_MAP) {
@@ -1643,48 +1426,38 @@
           break;
         }
       }
-
       const durationMatch = lower.match(/(\d+)\s*(day|days|week|weeks|hour|hours)/);
       const duration = durationMatch ? `${durationMatch[1]} ${durationMatch[2]}` : null;
-
       const bpMatch = raw.match(/(\d{2,3})\s*(?:\/|over)\s*(\d{2,3})/i);
       const bp = bpMatch ? `${bpMatch[1]}/${bpMatch[2]}` : null;
-
       const pulseMatch = lower.match(/(?:pulse|heart rate|hr)\D{0,8}(\d{2,3})/) || lower.match(/(\d{2,3})\s*bpm/);
       const pulse = pulseMatch ? pulseMatch[1] : null;
-
       const tempMatch = lower.match(/(?:temp|temperature)\D{0,8}(\d{2}\.?\d?)/) || lower.match(/(\d{2}\.?\d?)\s*(?:°c|degrees c|degrees|c\b)/);
       const temp = tempMatch ? tempMatch[1] : null;
-
       const meds = [];
       EHR_MED_VOCAB.forEach(med => {
         const re = new RegExp(med + '\\D{0,10}(\\d{2,4}\\s*mg)?', 'i');
         const m = raw.match(re);
         if (m) meds.push(m[1] ? `${med} ${m[1].replace(/\s+/g, '')}` : med);
       });
-
       const setIfFound = (id, value) => {
         if (value === null || value === undefined || value === '') return;
         const el = document.getElementById(id);
         if (el) el.value = value;
       };
-
       setIfFound('ehr-cc', chiefComplaint);
       setIfFound('ehr-duration', duration);
       setIfFound('ehr-bp', bp);
       setIfFound('ehr-pulse', pulse);
       setIfFound('ehr-temp', temp);
-
       if (meds.length) {
         const el = document.getElementById('ehr-meds');
         if (el) el.value = meds.map((m, i) => `${i + 1}. ${m}`).join('\n');
       }
-
       if (icdMatch) {
         const icdEl = document.getElementById('ehr-icd');
         if (icdEl) icdEl.innerText = `ICD-10 Code: ${icdMatch.code} (${icdMatch.label})`;
       }
-
       const syncBtn = document.getElementById('btn-sync-ehr');
       if (syncBtn && chiefComplaint) {
         syncBtn.disabled = false;
@@ -1712,109 +1485,105 @@
     async function toggleEHRRecording() {
       if (ehrRecording) {
         ehrRecording = false;
+        if (ehrRecognition) { try { ehrRecognition.stop(); } catch (e) {} }
         if (ehrMediaRecorder && ehrMediaRecorder.state === 'recording') ehrMediaRecorder.stop();
         setEHRRecordButtonState(false);
         return;
       }
-
-      ehrLiveTranscript = '';
+      ehrLiveTranscript = "";
       const box = document.getElementById('ehr-transcript-box');
-      if (box) box.innerHTML = '';
-
+      if (box) box.innerHTML = "";
+      const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionImpl) {
+        try {
+          ehrRecognition = new SpeechRecognitionImpl();
+          ehrRecognition.continuous = true;
+          ehrRecognition.interimResults = true;
+          ehrRecognition.lang = 'en-US';
+          ehrRecognition.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const chunk = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                ehrLiveTranscript += chunk + ' ';
+                appendEHRTranscriptLine(chunk.trim());
+                extractEHRFields(ehrLiveTranscript);
+              } else {
+                interim = chunk;
+              }
+            }
+            ehrSetStatus(interim ? `Listening: "${interim}"` : 'Listening...');
+          };
+          ehrRecognition.onerror = (e) => {
+            ehrSetStatus(`Speech recognition error: ${e.error}`);
+          };
+          ehrRecognition.onend = () => {
+            if (ehrRecording) { try { ehrRecognition.start(); } catch (e) {} }
+          };
+          ehrRecognition.start();
+          ehrRecording = true;
+          setEHRRecordButtonState(true);
+          ehrSetStatus('Listening... speak the consultation naturally.');
+          return;
+        } catch (err) {
+          ehrSetStatus(`On-device recognition unavailable (${err.message}); falling back to audio upload.`);
+        }
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         ehrAudioChunks = [];
         ehrMediaRecorder = new MediaRecorder(stream);
-        ehrMediaRecorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) ehrAudioChunks.push(e.data);
-        };
+        ehrMediaRecorder.ondataavailable = (e) => ehrAudioChunks.push(e.data);
         ehrMediaRecorder.onstop = async () => {
           stream.getTracks().forEach(t => t.stop());
-          const mime = ehrMediaRecorder?.mimeType || 'audio/webm';
-          const extension = mime.includes('ogg') ? 'ogg' : 'webm';
-          const blob = new Blob(ehrAudioChunks, { type: mime });
-          const savedUrl = URL.createObjectURL(blob);
-          const currentAudio = document.getElementById('ehr-transcript-box');
-          if (currentAudio) currentAudio.dataset.recordingUrl = savedUrl;
-          await uploadEHRAudioForTranscription(blob, `consultation.${extension}`);
+          const blob = new Blob(ehrAudioChunks, { type: 'audio/webm' });
+          await uploadEHRAudioForTranscription(blob);
         };
-        ehrMediaRecorder.start(250);
+        ehrMediaRecorder.start();
         ehrRecording = true;
         setEHRRecordButtonState(true);
-        ehrSetStatus('Recording consultation audio — the complete recording will be uploaded to Intron when you stop.');
+        ehrSetStatus('Recording consultation audio (no on-device recognition in this browser)...');
       } catch (err) {
         ehrSetStatus(`Microphone unavailable: ${err.message}`);
-        setEHRRecordButtonState(false);
       }
     }
 
-    async function uploadEHRAudioForTranscription(blob, filename = 'consultation.webm') {
-      ehrSetStatus('Uploading consultation recording to Intron and transcribing...');
-      const apiOrigin = resolveSaharaApiOrigin();
+    async function uploadEHRAudioForTranscription(blob) {
+      ehrSetStatus('Transcribing consultation audio via Intron...');
+      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
+      const apiOrigin = window.SAHARA_API_ORIGIN || configuredOrigin || `${window.location.protocol}//${window.location.hostname}:8000`;
       const form = new FormData();
-      form.append('audio_file_blob', blob, filename);
-      form.append('audio_file_name', filename);
-      form.append('use_language_asr_input', 'am');
-      form.append('use_category', 'file_category_telehealth');
-      form.append('use_disable_llm_corrections', 'FALSE');
+      form.append("audio_file_blob", blob, "consultation.webm");
+      form.append("audio_file_name", "consultation.webm");
+      form.append("use_language_asr_input", "am");
+      form.append("use_category", "file_category_telehealth");
+      form.append("use_disable_llm_corrections", "FALSE");
       try {
-        const response = await fetch(`${apiOrigin}/api/intron/stt/upload-sync`, { method: 'POST', body: form });
+        const response = await fetch(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
         const result = await response.json();
-        if (!response.ok) {
-          const detail = result?.detail;
-          if (response.status === 503 && detail?.file_id) {
-            ehrSetStatus(`Intron is still processing file ${detail.file_id}. Checking status...`);
-            const completed = await pollIntronFileStatus(detail.file_id, apiOrigin);
-            return applyEHRTranscript(completed);
-          }
-          throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail || result));
+        if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
+        const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
+        if (transcript) {
+          appendEHRTranscriptLine(transcript);
+          extractEHRFields(transcript);
+          ehrSetStatus('Transcription complete. Fields auto-filled below -- please verify.');
+        } else {
+          ehrSetStatus('Transcription returned no text.');
         }
-        return applyEHRTranscript(result);
       } catch (error) {
-        console.error('Consultation transcription failed:', error);
-        ehrSetStatus(`Intron transcription failed: ${error.message}`);
+        console.error("Consultation transcription failed:", error);
+        ehrSetStatus(`Transcription failed: ${error.message}. Try Chrome for on-device recognition, or use "Load Consultation Demo".`);
       } finally {
         setEHRRecordButtonState(false);
       }
     }
 
-    async function pollIntronFileStatus(fileId, apiOrigin) {
-      for (let attempt = 0; attempt < 30; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const response = await fetch(`${apiOrigin}/api/intron/stt/status/${encodeURIComponent(fileId)}`, {
-          headers: { Accept: 'application/json' }
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || `Status lookup failed (${response.status})`);
-        const status = payload?.data?.processing_status;
-        if (status === 'FILE_TRANSCRIBED') return payload;
-        if (status === 'FILE_PROCESSING_FAILED') throw new Error('Intron file processing failed.');
-      }
-      throw new Error('Intron transcription is taking longer than expected. Please check the recording status later.');
-    }
-
-    function applyEHRTranscript(result) {
-      const transcript = result?.data?.audio_transcript || '';
-      if (!transcript) {
-        ehrSetStatus(`Intron returned status ${result?.data?.processing_status || 'without transcript text'}.`);
-        return result;
-      }
-      appendEHRTranscriptLine(transcript);
-      extractEHRFields(transcript);
-      ehrSetStatus('Intron transcription complete. Fields auto-filled below — please verify.');
-      return result;
-    }
-
-    // Sequentially reveals + speaks each line of a simulated call, one at a
-    // time, so the AI Agent's turns are actually heard aloud like a real
-    // voice call rather than appearing as static text all at once.
     function playDialogueSequence(lines, { onDone } = {}) {
       const dialogue = document.getElementById('followup-dialogue');
       const callIcon = document.getElementById('call-icon');
       const callStatus = document.getElementById('call-status-text');
       const callSub = document.getElementById('call-subtext');
       if (dialogue) dialogue.innerHTML = "";
-
       let index = 0;
       function next() {
         if (index >= lines.length) {
@@ -1826,17 +1595,15 @@
         }
         const line = lines[index];
         index += 1;
-
         const p = document.createElement('p');
         p.innerHTML = `<b class="${line.speaker === 'agent' ? 'text-indigo-400' : 'text-emerald-400'}">${line.speaker === 'agent' ? 'AI Agent' : 'Patient'}:</b> "${line.text}"`;
         if (dialogue) dialogue.appendChild(p);
-
         if (line.speaker === 'agent') {
           if (callIcon) callIcon.className = "fa-solid fa-phone-volume text-emerald-400 animate-bounce";
           if (callStatus) callStatus.innerText = "Speaking...";
           if (callSub) callSub.innerText = "Sahara Voice Agent speaking in Amharic-English...";
-          speakText(line.text, {
-            lang: 'am',
+          speakText(line.text.replace(/[\u1200-\u137F]/g, ''), {
+            lang: 'en-US',
             onend: () => setTimeout(next, 350)
           });
         } else {
@@ -1856,11 +1623,9 @@
       const callStatus = document.getElementById('call-status-text');
       const callSub = document.getElementById('call-subtext');
       const callIcon = document.getElementById('call-icon');
-
       if (callIcon) callIcon.className = "fa-solid fa-phone-volume text-emerald-400 animate-bounce";
       if (callStatus) callStatus.innerText = "Outbound Call Active (Connected)";
       if (callSub) callSub.innerText = "Sahara Voice Agent speaking in Amharic-English...";
-
       if (type === 'stable') {
         playDialogueSequence([
           { speaker: 'agent', text: "ጤና ይስጥልኝ ከበደ, post-op ሕመሙ ደህና ነው? Kebede, how is the post-op pain today?" },
@@ -1873,6 +1638,7 @@
         }
         if (desc) desc.innerText = "Patient reports reduced pain and absence of fever. No intervention required.";
         if (escBtn) escBtn.disabled = true;
+        analyzePostCareFromSimulation("ደህና ነኝ, ሕመሙ lessen ሲያደርግ, no fever today.", "general");
       } else {
         playDialogueSequence([
           { speaker: 'agent', text: "ጤና ይስጥልኝ ከበደ, how is the wound site feeling? Kebede, how is the wound site feeling?" },
@@ -1888,6 +1654,7 @@
           escBtn.disabled = false;
           escBtn.className = "mt-3 w-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2 rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-red-600/30";
         }
+        analyzePostCareFromSimulation("wound site red and pus discharge, fever felt very high", "general");
       }
     }
 
@@ -1901,38 +1668,280 @@
       }
     }
 
+    // ---------------------------------------------------------------------
+    // NEW: Post-Care Protocol Engine wiring (Dr. Basiel Annex 1-3)
+    // Calls the real backend endpoint added to main.py:
+    // POST /api/v1/post-care/analyze { transcript, care_track }
+    // Used both by the manual "Analyze" button and, automatically, by the
+    // two Simulate buttons above (so the badges reflect real computed
+    // output, not hand-set hardcoded strings).
+    // ---------------------------------------------------------------------
+    function getPostCareApiOrigin() {
+      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
+      return window.SAHARA_API_ORIGIN || configuredOrigin || `${window.location.protocol}//${window.location.hostname}:8000`;
+    }
+
+    async function callPostCareAnalyze(transcript, careTrack) {
+      const apiOrigin = getPostCareApiOrigin();
+      const response = await fetch(`${apiOrigin}/api/v1/post-care/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript, care_track: careTrack })
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Analysis failed (${response.status})`);
+      }
+      return response.json();
+    }
+
+    function renderPostCareResult(data) {
+      const panel = document.getElementById('postcare-result-panel');
+      const acuityBanner = document.getElementById('postcare-acuity-banner');
+      const riskBadge = document.getElementById('postcare-risk-badge');
+      const nurseBadge = document.getElementById('postcare-nurse-badge');
+      const indicatorsText = document.getElementById('postcare-indicators-text');
+      if (!panel) return;
+
+      panel.classList.remove('hidden');
+
+      const riskColors = {
+        on_track: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+        at_risk: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+        high_risk: 'border-red-500/40 bg-red-500/10 text-red-300',
+      };
+      if (riskBadge) {
+        riskBadge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-lg border ' + (riskColors[data.recovery_risk_level] || riskColors.on_track);
+        riskBadge.innerText = `Recovery risk: ${data.recovery_risk_score}/100 (${data.recovery_risk_level.replace('_', ' ')})`;
+      }
+
+      if (nurseBadge) nurseBadge.classList.toggle('hidden', !data.nurse_escalated);
+
+      if (indicatorsText) {
+        indicatorsText.innerText = data.recovery_indicators && data.recovery_indicators.length
+          ? `Indicators detected: ${data.recovery_indicators.join(', ')}`
+          : 'No recovery-risk indicators detected in this transcript.';
+      }
+
+      if (acuityBanner) {
+        if (data.maternal_acuity) {
+          const acuityColorMap = {
+            red: 'border-red-500/50 bg-red-500/15 text-red-200',
+            orange: 'border-orange-500/50 bg-orange-500/15 text-orange-200',
+            yellow: 'border-yellow-500/50 bg-yellow-500/15 text-yellow-200',
+            green: 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200',
+            blue: 'border-sky-500/50 bg-sky-500/15 text-sky-200',
+          };
+          const a = data.maternal_acuity;
+          acuityBanner.className = 'p-2.5 rounded-lg border text-[11px] font-semibold ' + (acuityColorMap[a.color] || acuityColorMap.blue);
+          acuityBanner.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> ${a.label} -- intervention: ${a.intervention_time}, reassess: ${a.reassessment}` +
+            (a.matched_keywords.length ? `<br><span class="font-normal opacity-80">Matched: ${a.matched_keywords.join(', ')}</span>` : '');
+          acuityBanner.classList.remove('hidden');
+        } else {
+          acuityBanner.classList.add('hidden');
+        }
+      }
+    }
+
+    async function analyzePostCareTranscript() {
+      const input = document.getElementById('postcare-transcript-input');
+      const careTrack = document.getElementById('postcare-care-track')?.value || 'general';
+      const transcript = input ? input.value.trim() : '';
+      if (!transcript) return;
+      try {
+        const data = await callPostCareAnalyze(transcript, careTrack);
+        renderPostCareResult(data);
+      } catch (error) {
+        console.error('Post-care analysis failed:', error);
+        const panel = document.getElementById('postcare-result-panel');
+        if (panel) {
+          panel.classList.remove('hidden');
+          panel.innerHTML = `<p class="text-[11px] text-red-400">Analysis failed: ${error.message}. Is the gateway backend running?</p>`;
+        }
+      }
+    }
+
+    async function analyzePostCareFromSimulation(transcript, careTrack) {
+      // Fire-and-forget: fills the same analyzer panel automatically when a
+      // Simulate button runs, so the demo shows real computed output.
+      const input = document.getElementById('postcare-transcript-input');
+      if (input) input.value = transcript;
+      try {
+        const data = await callPostCareAnalyze(transcript, careTrack);
+        renderPostCareResult(data);
+      } catch (error) {
+        console.error('Post-care analysis (simulation) failed:', error);
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Real multi-turn follow-up call: Intron asks -> patient answers by
+    // mic -> Intron transcribes -> protocol engine decides next question
+    // or escalates. No LLM anywhere in this loop.
+    // ---------------------------------------------------------------------
+    let followupSession = null;
+    let followupMediaRecorder = null;
+    let followupAudioChunks = [];
+
+    async function startRealFollowupCall() {
+      const careTrack = document.getElementById('postcare-care-track')?.value || 'general';
+      const startBtn = document.getElementById('followup-real-start-btn');
+      const activePanel = document.getElementById('followup-real-active');
+      const statusEl = document.getElementById('followup-real-status');
+      const logEl = document.getElementById('followup-real-log');
+      const summaryEl = document.getElementById('followup-real-summary');
+
+      logEl.innerHTML = '';
+      summaryEl.classList.add('hidden');
+      startBtn.disabled = true;
+      startBtn.innerText = 'Starting...';
+
+      try {
+        const apiOrigin = getPostCareApiOrigin();
+        const resp = await fetch(`${apiOrigin}/api/v1/post-care/session/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ care_track: careTrack })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Failed to start session');
+
+        followupSession = { session_id: data.session_id };
+        activePanel.classList.remove('hidden');
+        startBtn.classList.add('hidden');
+        renderFollowupQuestion(data);
+      } catch (err) {
+        statusEl.innerText = `Failed to start: ${err.message}`;
+        startBtn.disabled = false;
+        startBtn.innerText = 'Start Real Follow-up Call';
+      }
+    }
+
+    function renderFollowupQuestion(data) {
+      document.getElementById('followup-real-question').innerText = data.question_text;
+      document.getElementById('followup-real-status').innerText = `Question ${data.question_index + 1} of ${data.total_questions}`;
+      document.getElementById('followup-real-record-btn').classList.remove('hidden');
+      playFollowupAudio(data.question_audio_url, data.question_text);
+    }
+
+    function playFollowupAudio(url, fallbackText) {
+      const player = document.getElementById('followup-real-audio-player');
+      player.innerHTML = '';
+      if (url) {
+        const audio = document.createElement('audio');
+        audio.src = url;
+        audio.controls = true;
+        audio.autoplay = true;
+        player.appendChild(audio);
+      } else {
+        player.innerHTML = '<p class="text-[11px] text-amber-400 italic">No Intron TTS audio (key not configured on the server) -- question text shown above, and your browser\'s voice will read it instead.</p>';
+        speakText(fallbackText, { lang: 'am-ET' });
+      }
+    }
+
+    async function toggleFollowupRecording() {
+      const btn = document.getElementById('followup-real-record-btn');
+      const statusEl = document.getElementById('followup-real-status');
+      if (!followupMediaRecorder || followupMediaRecorder.state !== 'recording') {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          followupAudioChunks = [];
+          followupMediaRecorder = new MediaRecorder(stream);
+          followupMediaRecorder.ondataavailable = (e) => followupAudioChunks.push(e.data);
+          followupMediaRecorder.onstop = async () => {
+            stream.getTracks().forEach((t) => t.stop());
+            const blob = new Blob(followupAudioChunks, { type: 'audio/webm' });
+            await submitFollowupAnswer(blob);
+          };
+          followupMediaRecorder.start();
+          btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop & Submit Answer';
+          btn.className = "w-full bg-red-500 hover:bg-red-400 text-white text-xs font-bold py-2 rounded-lg transition animate-pulse flex items-center justify-center gap-2";
+        } catch (err) {
+          statusEl.innerText = `Mic error: ${err.message}`;
+        }
+      } else {
+        followupMediaRecorder.stop();
+        btn.classList.add('hidden');
+        statusEl.innerText = 'Transcribing your answer via Intron...';
+      }
+    }
+
+    async function submitFollowupAnswer(blob) {
+      const apiOrigin = getPostCareApiOrigin();
+      const form = new FormData();
+      form.append('audio_file_blob', blob, 'answer.webm');
+      form.append('audio_file_name', 'answer.webm');
+      try {
+        const resp = await fetch(`${apiOrigin}/api/v1/post-care/session/answer?session_id=${followupSession.session_id}`, {
+          method: 'POST', body: form
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Answer processing failed');
+
+        appendFollowupTranscriptLine(data.transcript);
+
+        if (data.done) {
+          renderFollowupFinal(data);
+        } else {
+          renderFollowupQuestion(data);
+        }
+      } catch (err) {
+        document.getElementById('followup-real-status').innerText = `Error: ${err.message}`;
+      }
+    }
+
+    function appendFollowupTranscriptLine(text) {
+      const log = document.getElementById('followup-real-log');
+      const p = document.createElement('p');
+      p.innerHTML = `<b class="text-emerald-400">You said:</b> "${escapeHtmlFollowup(text)}"`;
+      log.appendChild(p);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function escapeHtmlFollowup(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    function renderFollowupFinal(data) {
+      document.getElementById('followup-real-record-btn').classList.add('hidden');
+      const statusEl = document.getElementById('followup-real-status');
+      statusEl.innerText = data.emergency ? 'EMERGENCY DETECTED' : 'Follow-up call complete';
+      playFollowupAudio(data.narration_audio_url, data.narration_text);
+
+      const summary = document.getElementById('followup-real-summary');
+      summary.classList.remove('hidden');
+      summary.className = 'mt-2 p-2.5 rounded-lg border text-[11px] font-semibold ' +
+        (data.emergency ? 'border-red-500/50 bg-red-500/15 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300');
+      let html = `Risk: ${data.recovery_risk_score}/100 (${data.recovery_risk_level.replace('_', ' ')})`;
+      if (data.maternal_acuity) html += `<br>${data.maternal_acuity.label}`;
+      if (data.nurse_escalated) html += '<br><span class="text-red-300">Nurse escalation required -- decision support only, confirm with real vitals.</span>';
+      summary.innerHTML = html;
+
+      document.getElementById('followup-real-start-btn').classList.remove('hidden');
+      document.getElementById('followup-real-start-btn').disabled = false;
+      document.getElementById('followup-real-start-btn').innerText = 'Start Another Call';
+    }
+
     function initBenchmarkChart() {
       const canvas = document.getElementById('benchmarkChart');
       if (!canvas) return;
-
       const ctx = canvas.getContext('2d');
       const initialData = GOLD_STANDARD_DATASET["AGGREGATE"].chartData;
-
       benchmarkChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: initialData.labels,
           datasets: [
-            {
-              label: 'Word Error Rate (WER %)',
-              data: initialData.wer,
-              backgroundColor: ['#10b981', '#64748b', '#6366f1'],
-              borderRadius: 6
-            },
-            {
-              label: 'Character Error Rate (CER %)',
-              data: initialData.cer,
-              backgroundColor: ['#059669', '#475569', '#4f46e5'],
-              borderRadius: 6
-            }
+            { label: 'Word Error Rate (WER %)', data: initialData.wer, backgroundColor: ['#10b981', '#64748b', '#6366f1'], borderRadius: 6 },
+            { label: 'Character Error Rate (CER %)', data: initialData.cer, backgroundColor: ['#059669', '#475569', '#4f46e5'], borderRadius: 6 }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } } }
-          },
+          plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } } } },
           scales: {
             x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
             y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' }, title: { display: true, text: 'Error Rate % (Lower is Better)', color: '#64748b' } }
@@ -1945,16 +1954,13 @@
       const select = document.getElementById('benchmark-case-select');
       const caseKey = select ? select.value : 'AGGREGATE';
       const caseData = GOLD_STANDARD_DATASET[caseKey] || GOLD_STANDARD_DATASET['AGGREGATE'];
-
       const badge = document.getElementById('chart-case-badge');
       if (badge) badge.innerText = caseData.title;
-
       if (benchmarkChartInstance && caseData.chartData) {
         benchmarkChartInstance.data.datasets[0].data = caseData.chartData.wer;
         benchmarkChartInstance.data.datasets[1].data = caseData.chartData.cer;
         benchmarkChartInstance.update();
       }
-
       const tableBody = document.getElementById('matrix-table-body');
       if (tableBody) {
         tableBody.innerHTML = caseData.matrix.map(row => `
@@ -1967,10 +1973,8 @@
           </tr>
         `).join('');
       }
-
       const commentEl = document.getElementById('evaluator-comment-text');
       if (commentEl) commentEl.innerText = caseData.comment;
-
       const codeBlock = document.getElementById('json-code-block');
       const sampleIdEl = document.getElementById('inspector-sample-id');
       if (sampleIdEl) sampleIdEl.innerText = caseKey;
@@ -1996,15 +2000,10 @@
       const dp = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(0));
       for (let i = 0; i <= a.length; i++) dp[i][0] = i;
       for (let j = 0; j <= b.length; j++) dp[0][j] = j;
-
       for (let i = 1; i <= a.length; i++) {
         for (let j = 1; j <= b.length; j++) {
           const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,
-            dp[i][j - 1] + 1,
-            dp[i - 1][j - 1] + cost
-          );
+          dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
         }
       }
       return dp[a.length][b.length];
@@ -2013,117 +2012,20 @@
     function runLiveWerCalculation() {
       const ref = document.getElementById('calc-reference')?.value || '';
       const hyp = document.getElementById('calc-hypothesis')?.value || '';
-
       const refWords = ref.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const hypWords = hyp.trim().toLowerCase().split(/\s+/).filter(Boolean);
-
       const refChars = ref.trim().toLowerCase().replace(/\s+/g, '');
       const hypChars = hyp.trim().toLowerCase().replace(/\s+/g, '');
-
       const wordEdits = computeLevenshteinDistance(refWords, hypWords);
       const charEdits = computeLevenshteinDistance(refChars.split(''), hypChars.split(''));
-
       const wer = refWords.length ? ((wordEdits / refWords.length) * 100).toFixed(1) : 0;
       const cer = refChars.length ? ((charEdits / refChars.length) * 100).toFixed(1) : 0;
-
       const results = document.getElementById('calc-results');
       if (results) {
         results.innerHTML = `
           <span class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded text-emerald-400 font-bold">Calculated WER: ${wer}%</span>
           <span class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded text-teal-400 font-bold">Calculated CER: ${cer}%</span>
         `;
-      }
-    }
-
-    function resolveSaharaApiOrigin() {
-      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
-      return window.SAHARA_API_ORIGIN || configuredOrigin || (
-        window.location.port === '8000'
-          ? window.location.origin
-          : `${window.location.protocol === 'https:' ? 'https:' : 'http:'}//${window.location.hostname}:8000`
-      );
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.innerText = str == null ? '' : String(str);
-      return div.innerHTML;
-    }
-
-    const TRIAGE_BADGE_CLASS = {
-      EMERGENCY: 'bg-red-500/10 border border-red-500/30 text-red-300',
-      URGENT: 'bg-amber-500/10 border border-amber-500/30 text-amber-300',
-      ROUTINE: 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-    };
-
-    async function runLiveBackendBenchmark() {
-      const fileInput = document.getElementById('live-benchmark-file');
-      const referenceInput = document.getElementById('live-benchmark-reference');
-      const languageSelect = document.getElementById('live-benchmark-language');
-      const statusEl = document.getElementById('live-benchmark-status');
-      const runBtn = document.getElementById('live-benchmark-run');
-      const resultsPanel = document.getElementById('live-benchmark-results');
-      const tableBody = document.getElementById('live-benchmark-table-body');
-      const agreementEl = document.getElementById('live-benchmark-agreement');
-
-      const file = fileInput?.files?.[0];
-      const referenceTranscript = referenceInput?.value?.trim() || '';
-
-      if (!file) {
-        if (statusEl) statusEl.innerText = 'Choose an audio file first.';
-        return;
-      }
-      if (!referenceTranscript) {
-        if (statusEl) statusEl.innerText = 'Enter the reference transcript for that audio.';
-        return;
-      }
-
-      const apiOrigin = resolveSaharaApiOrigin();
-      const form = new FormData();
-      form.append('file', file, file.name);
-      form.append('reference_transcript', referenceTranscript);
-      form.append('language_code', languageSelect?.value || 'am-ET');
-
-      if (runBtn) runBtn.disabled = true;
-      if (statusEl) statusEl.innerText = 'Running live Sahara vs Whisper comparison — first call may take longer while Whisper loads...';
-      if (resultsPanel) resultsPanel.classList.add('hidden');
-
-      try {
-        const response = await fetch(`${apiOrigin}/api/v1/benchmark`, { method: 'POST', body: form });
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.detail || payload.message || `Benchmark request failed (${response.status})`);
-        }
-
-        if (tableBody) {
-          tableBody.innerHTML = (payload.results || []).map(row => {
-            const badgeClass = TRIAGE_BADGE_CLASS[row.triage] || 'bg-slate-800 text-slate-300';
-            return `
-              <tr>
-                <td class="py-2.5 text-white font-bold">${escapeHtml(row.model)}${row.mode === 'fallback_judge_mode' ? ' <span class="text-[10px] text-amber-400 font-normal">(judge-mode mock)</span>' : ''}</td>
-                <td class="py-2.5">${row.WER_percent}%</td>
-                <td class="py-2.5">${row.CER_percent}%</td>
-                <td class="py-2.5">${row.latency_ms != null ? `${row.latency_ms} ms` : '--'}</td>
-                <td class="py-2.5"><span class="px-2 py-0.5 rounded ${badgeClass}">${escapeHtml(row.triage)}</span></td>
-                <td class="py-2.5 text-slate-400 max-w-xs truncate" title="${escapeHtml(row.transcript)}">${escapeHtml(row.transcript)}</td>
-              </tr>
-            `;
-          }).join('');
-        }
-
-        if (agreementEl) {
-          agreementEl.innerText = payload.triage_agreement
-            ? 'Both models produced the same triage classification for this sample.'
-            : 'Models disagreed on triage classification for this sample — review both transcripts.';
-        }
-
-        if (resultsPanel) resultsPanel.classList.remove('hidden');
-        if (statusEl) statusEl.innerText = 'Done. These results are live local validation for this uploaded sample — not official MultiBench figures.';
-      } catch (error) {
-        console.error('Live benchmark failed:', error);
-        if (statusEl) statusEl.innerText = `❌ ${error.message}`;
-      } finally {
-        if (runBtn) runBtn.disabled = false;
       }
     }
 
@@ -2184,27 +2086,21 @@
       const ctx = canvas.getContext('2d');
       const width = canvas.width = canvas.offsetWidth;
       const height = canvas.height = canvas.offsetHeight;
-
       ctx.clearRect(0, 0, width, height);
       ctx.beginPath();
       ctx.lineWidth = 2;
       ctx.strokeStyle = isSimulating ? '#10b981' : '#334155';
-
       const sliceWidth = width / 100;
       let x = 0;
       const time = Date.now() / 150;
-
       for (let i = 0; i < 100; i++) {
         const v = isSimulating ? Math.sin(i * 0.2 + time) * 0.4 + Math.cos(i * 0.1 - time) * 0.3 : 0.05 * Math.sin(i * 0.1);
         const y = (v * height / 2) + (height / 2);
-
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
-
         x += sliceWidth;
       }
       ctx.stroke();
-
       if (isSimulating) {
         waveAnimFrame = requestAnimationFrame(() => drawWaveform(true));
       }
@@ -2213,10 +2109,8 @@
     function runSampleAudioPreloader() {
       const status = document.getElementById('mic-status');
       const progress = document.getElementById('mic-progress');
-
       if (status) status.innerText = "Pre-loading audio sample [GOLD-ETH-001] into Sahara v2.5 pipeline...";
       if (progress) progress.style.width = '30%';
-
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
@@ -2231,13 +2125,10 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 1.2);
       } catch(e) {}
-
       drawWaveform(true);
-
       setTimeout(() => {
         if (progress) progress.style.width = '75%';
       }, 800);
-
       setTimeout(() => {
         if (waveAnimFrame) cancelAnimationFrame(waveAnimFrame);
         drawWaveform(false);
@@ -2265,48 +2156,16 @@
         "type": "collection",
         "timestamp": new Date().toISOString(),
         "entry": [
-          {
-            "resource": {
-              "resourceType": "Patient",
-              "id": "ETH-PATIENT-90412",
-              "gender": "female",
-              "active": true
-            }
-          },
-          {
-            "resource": {
-              "resourceType": "Encounter",
-              "id": "ENC-90412",
-              "status": "finished",
-              "class": { "code": "AMB", "display": "ambulatory" },
-              "reasonCode": [{ "text": document.getElementById('ehr-cc')?.value || "Chest Pain & Headache" }]
-            }
-          },
-          {
-            "resource": {
-              "resourceType": "Observation",
-              "id": "OBS-VITALS-90412",
-              "status": "final",
-              "code": { "text": "Vital Signs" },
-              "component": [
+          { "resource": { "resourceType": "Patient", "id": "ETH-PATIENT-90412", "gender": "female", "active": true } },
+          { "resource": { "resourceType": "Encounter", "id": "ENC-90412", "status": "finished", "class": { "code": "AMB", "display": "ambulatory" }, "reasonCode": [{ "text": document.getElementById('ehr-cc')?.value || "Chest Pain & Headache" }] } },
+          { "resource": { "resourceType": "Observation", "id": "OBS-VITALS-90412", "status": "final", "code": { "text": "Vital Signs" }, "component": [
                 { "code": { "text": "BP" }, "valueString": document.getElementById('ehr-bp')?.value || "140/90" },
                 { "code": { "text": "Heart Rate" }, "valueString": document.getElementById('ehr-pulse')?.value || "88 bpm" },
                 { "code": { "text": "Body Temp" }, "valueString": document.getElementById('ehr-temp')?.value || "37.8 C" }
-              ]
-            }
-          },
-          {
-            "resource": {
-              "resourceType": "Condition",
-              "id": "COND-90412",
-              "code": {
-                "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "R07.9", "display": "Chest pain, unspecified" }]
-              }
-            }
-          }
+              ] } },
+          { "resource": { "resourceType": "Condition", "id": "COND-90412", "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "R07.9", "display": "Chest pain, unspecified" }] } } }
         ]
       };
-
       helperDownloadFile("fhir_encounter_EHR-90412.json", JSON.stringify(fhirPayload, null, 2), "application/json");
     }
 
@@ -2317,7 +2176,6 @@
       const pulse = document.getElementById('ehr-pulse')?.value || "88 bpm";
       const temp = document.getElementById('ehr-temp')?.value || "37.8 C";
       const meds = document.getElementById('ehr-meds')?.value || "Amoxicillin 500mg, Paracetamol 500mg";
-
       const summaryText = `=======================================================
 AFRIHEALTH AI - CLINICAL ENCOUNTER SUMMARY REPORT
 =======================================================
@@ -2352,11 +2210,9 @@ CLINICIAN AUDIT & SIGN-OFF
 Status           : Transcribed & Verified via Sahara v2.5
 Digital Signoff  : Dr. Tadesse (Duty Clinician)
 =======================================================`;
-
       helperDownloadFile("Clinical_Summary_EHR-90412.txt", summaryText, "text/plain");
     }
 
-    // Initialize UI states on load
     window.addEventListener('DOMContentLoaded', () => {
       loadVoicesOnce();
       initBenchmarkChart();

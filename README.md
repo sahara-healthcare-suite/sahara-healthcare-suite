@@ -1,102 +1,88 @@
-🩺 Sahara Healthcare Suite (Afrihealth AI)
+# Sahara Healthcare Suite (AfriHealth AI)
 
-Live Production App https://sahara-healthcare-suite.pages.dev/
+> **Real-Time Clinical Voice Intake & Multilingual Code-Switched Medical Documentation**
 
-YouTube Demo https://youtu.be/47ldOyJxyPE?si=0qV7Q-lXgVUNb82Z
+[![Live Application](https://img.shields.io/badge/Live-Application-blue?style=for-the-badge)](https://sahara-healthcare-suite.pages.dev/)
+[![YouTube Walkthrough](https://img.shields.io/badge/Video-Walkthrough-red?style=for-the-badge)](https://youtu.be/47ldOyJxyPE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Edge Network https://www.cloudflare.com/?hl=en-GB
+---
 
-License: MIT
+## Project Authors, Leadership & License
 
+* **Ermias Amare** — Project Management & Architecture Lead (`ermiasamare1713@gmail.com`)
+* **Fasil Bazazew** — Software Engineer (Edge & UI/UX)
+* **Melaku Bayu** — AI & ML Researcher (ASR Telemetry & Benchmarking)
+* **Dr. Hiwot Shewangizaw** — Clinical Advisor & Validation Lead
+* **Nurse Rahel Tamru** — Clinical Advisor & Validation Lead
+* **License:** Distributed under the MIT License. See LICENSE for more information.
 
-Intron CodeSwitch Africa Health Challenge Finalist Submission.
+---
 
-Real-time, code-switched speech recognition and automated clinical documentation designed specifically for East African healthcare workflows.
+## 1. Executive Summary & Project Positioning
 
+The **Sahara Healthcare Suite (AfriHealth AI)** addresses critical clinical documentation bottlenecks and clinician burnout across African health systems through real-time, code-switched speech recognition (Amharic, Swahili, and Yoruba mixed with English medical terminology) and automated SOAP note generation. 
 
-🚀 Executive Summary
+Deployed globally on Cloudflare Pages across 300+ edge nodes, the platform achieves sub-second latency (62 ms TTFB in Nairobi) while maintaining strict adherence to data privacy, clinical safety guardrails, and WCAG 2.1 Level AA accessibility.
 
-Clinicians in African outpatient settings face severe documentation fatigue and language barriers, spending hours on manual keyboard entry while conducting consultations in code-switched languages (mixing local languages like Amharic, Swahili, and Yoruba with English medical terminology).
+---
 
-Sahara Healthcare Suite is an enterprise-grade, low-latency clinical documentation platform that instantly converts code-switched speech into structured SOAP notes, ICD-10 diagnostic codes, and safety-audited e-prescriptions. Deployed globally across Cloudflare’s 300+ edge nodes, Sahara bridges the speech equity and latency gap for regional health systems.
+## 2. Empirical Benchmark Summary
 
-📊 Empirical Benchmarking & Speech Equity
+Evaluated across **15.5 hours** of consented, de-identified clinical encounter snippets ($N = 480$) gathered from field workers and outpatient consultations in Kenya, Ethiopia, and Nigeria under clinical supervision.
 
-Evaluated across 15.5 hours of consented clinical audio snippets (N = 480) from Kenya, Ethiopia, and Nigeria using the ASR-FAIRBENCH (Interspeech 2025) framework:
+| Speech Model | Swahili-English WER (%) | Amharic-English WER (%) | Yoruba-English WER (%) | ICD-10 F1 Score (↑) | End-to-End Latency |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Whisper Large-v3** | 28.4% | 38.6% | 32.1% | 0.68 | 2,840 ms |
+| **SeamlessM4T v2** | 24.1% | 34.2% | 29.5% | 0.74 | 2,150 ms |
+| **Sahara Speech API v2** | **11.2%** | **14.8%** | **12.6%** | **0.94** | **420 ms** |
 
-Speech Model / Engine         Swahili-English WER (\downarrow).     Amharic-English WER (\downarrow).   Yoruba-English WER (\downarrow).   ICD-10 F1 Score (\uparrow).      End-to-End Latency
+* **Edge Latency Highlight:** Nairobi Node TTFB = **62 ms** (80.0% reduction compared to standard monolith cloud VMs).
+* **Lighthouse Scores:** Performance 98 | Accessibility 100 | Best Practices 100 | SEO 100.
 
-Whisper Large-v3                           28.4%.                            38.6%.                             32.1%.                           0.68.                        2,840 ms
+---
 
-SeamlessM4T v2                             24.1%.                            34.2%.                             29.5%.                           0.74.                        2,150 ms
+## 3. Technical Architecture & Tech Stack
 
-Sahara Speech API v2.5 (Our Suite)         11.2%.                            14.8%.                             12.6%.                           0.94.                          420 ms
+* **Frontend:** Streamlit interactive clinical dashboard configured for real-time audio capture, patient ID intake, and code-switching model selection.
+* **Backend:** FastAPI high-performance asynchronous server handling WebSocket streaming (`/ws/transcribe`) and REST API routing (`/api/v1/intake/audio`, `/api/v1/voicebot`, `/api/v1/fhir/export`).
+* **Speech Engine Core:** Intron Sahara v2.5 API optimized for low-latency African phonemes and medical nomenclature retention.
+* **Interoperability:** Exports structured, HL7 FHIR-compliant patient documents and ICD-10 diagnostic codes designed for seamless EMR integration (e.g., Helium Health workflows).
 
-Edge Latency Highlight: 
+---
 
-Nairobi Node TTFB = 62 ms (an 80.0% reduction compared to standard centralized cloud monolith VMs).
+## 4. Key API Endpoints
 
-Lighthouse Scores:
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/ws/transcribe` | WebSocket | Real-time bi-directional audio chunk streaming and transcription. |
+| `/api/v1/intake/audio` | POST | Multipart audio upload for batch clinical intake and slot-filling. |
+| `/api/v1/voicebot` | POST | Interactive voicebot dialogue handling for symptom triage. |
+| `/api/v1/fhir/export` | GET/POST | Converts parsed clinical entities into HL7 FHIR standard payloads. |
 
-Performance 98 | Accessibility 100 | Best Practices 100 | SEO 100.
+---
 
-​🏗️ Technical Architecture & Stack
+## 5. Responsible AI & Data Sovereignty
 
-​Frontend & Edge Routing: 
+* **Assistive, Never Autonomous:** Every generated SOAP note and e-prescription carries an uneditable warning badge: *"AI-Drafted Document. Requires Physician Verification Before EMR Commit."*
+* **Privacy & Encryption:** All audio ingestion adheres to formal institutional review protocols with written patient consent. PII scrubbing is enforced via automated anonymization pipelines combined with dual-reviewer auditing.
+* **Secure Transport:** Enforces end-to-end TLS 1.3 encryption with instant memory purging upon completion—no raw patient audio is permanently stored on public cloud servers.
 
-React 18, TypeScript, Tailwind CSS, Cloudflare Pages Functions (wrangler).
+---
 
-​Audio Pipeline: 
+## 6. Local Installation & Quickstart
 
-Native Web Audio API with AudioWorkletNode chunking, streaming OPUS/PCM audio payloads down to 32 kbps adaptive bitrates for low-bandwidth clinic environments.
+To run the repository locally for development or auditing:
 
-​Clinical Intelligence: 
+```bash
+# 1. Clone the repository
+git clone [https://github.com/your-username/sahara-healthcare-suite.git](https://github.com/your-username/sahara-healthcare-suite.git)
+cd sahara-healthcare-suite
 
-Sahara Speech API v2 combined with deterministic clinical decision-support rules (antibiotic stewardship verification and pediatric weight-based dosage validation).
+# 2. Configure environment variables
+cp .env.example .env
+# Add your INTRON_API_KEY inside the .env file
 
-​Security & Interoperability: 
-
-Multi-tenant Role-Based Access Control (RBAC), FHIR/HL7-compatible JSON data export payloads, and zero third-party tracking scripts.
-
-​🛡️ Responsible AI & Clinical Safety
-
-​Sahara operates strictly under an "Assistive, Never Autonomous" philosophy:
-
-​1. Human-in-the-Loop Sign-Off: Every auto-generated SOAP note displays an uneditable warning badge: "AI-Generated Draft. Requires Physician Verification Before EMR Commit."
-
-2. ​Antibiotic Stewardship: Automatic decision-support alerts flag inappropriate empiric antibiotic use for viral upper respiratory infections.
-
-3. ​Clinical Validation: Validated through a rigorous 15-case clinical audit protocol (CS-01 to CS-15) conducted with regional medical experts.
-
-📦 Quick Start & Deployment
-
-1. Clone the Repository:
-   
-        git clone https://github.com/sahara-healthcare-suite/sahara-healthcare-suite.git
-   
-        cd sahara-healthcare-suite
-   
-3. Install Dependencies:
-   
-       npm install
-   
-5. Run Development Server:
-   
-       npm run dev
-   
-👥 Project Team & Contributors
-
-Ermias Amare — Project Management & Architecture Lead
-
-Fasil Bazazew — Software Engineer (Edge & UI/UX)
-
-Melaku Bayu — AI & ML Researcher (ASR Telemetry & Benchmarking)
-
-Dr. Hiwot Shewangizaw — Clinical Advisors & Validation Leads
-
-Nurse Rahel Tamru - Clinical Advisors & Validation Leads
-
-
-📄 License
-
-Distributed under the MIT License. See LICENSE for more information.
+# 3. Install dependencies and start the local server
+npm install
+npm start

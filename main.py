@@ -885,14 +885,15 @@ import os
 import json
 import time
 import logging
+import re
 from collections import deque
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import base64
@@ -951,25 +952,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RateLimitMiddleware)
 
-# CORS configuration - Allow Cloudflare Pages and local dev
-ORIGINS = [
-    "https://sahara-healthcare-suite.pages.dev",
-    "https://sahara-healthcare-suite-1.pages.dev",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000"
+# CORS configuration - strict allowlist only
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "https://sahara-healthcare-suite.pages.dev,https://sahara-healthcare-suite-1.pages.dev,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000",
+    ).split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ORIGINS,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Configuration & Keys
-INTRON_API_KEY = os.getenv("INTRON_API_KEY", "")
+INTRON_API_KEY = os.getenv("INTRON_API_KEY") or ""
 INTRON_ENDPOINT = os.getenv("INTRON_ENDPOINT", "https://api.intron.io/v1/transcribe")
 
 # Ethiopian Medical & Local Symptom Phrase Boosting Dictionary
@@ -989,6 +991,256 @@ ETHIOPIAN_MEDICAL_VOCABULARY: List[str] = [
 class TranscriptionRequest(BaseModel):
     language_code: str = "am-ET"  # Amharic / Code-switched default
     boost_vocabulary: Optional[List[str]] = None
+
+
+class ICD10Diagnosis(BaseModel):
+    code: str = Field(..., description="Standard ICD-10 diagnostic code (e.g., R51, R50.9)")
+    description: str = Field(..., description="Official ICD-10 diagnostic description")
+
+
+class ClinicalSOAPSchema(BaseModel):
+    subjective: str = Field(
+        ...,
+        description="Patient chief complaint, history of present illness, and reported symptoms",
+    )
+    objective: str = Field(
+        ...,
+        description="Vital signs, physical exam findings, and clinical measurements",
+    )
+    assessment: str = Field(
+        ...,
+        description="Clinical reasoning, differential diagnosis, and primary assessment",
+    )
+    plan: str = Field(
+        ...,
+        description="Treatment strategy, medications prescribed, and follow-up instructions",
+    )
+    confidence_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Joint ASR and LLM confidence score (0.0 to 1.0)",
+    )
+    icd10_codes: List[ICD10Diagnosis] = Field(
+        default_factory=list,
+        description="List of mapped ICD-10 diagnosis codes",
+    )
+    flagged_code_switches: List[str] = Field(
+        default_factory=list,
+        description="Detected code-switched phrases (e.g., Amharic/Oromo terms)",
+    )
+    requires_manual_review: bool = Field(
+        default=False,
+        description="Flag set when low confidence (<0.82) or parsing fallback is triggered",
+    )
+    requires_manual_entry: bool = Field(
+        default=False,
+        description="Graceful fallback flag for downstream manual completion. Must be true when structured output cannot be validated.",
+    )
+
+    @model_validator(mode="after")
+    def sync_manual_flags(self):
+        if self.requires_manual_entry is False and self.requires_manual_review:
+            self.requires_manual_entry = True
+        if self.requires_manual_review is False and self.requires_manual_entry:
+            self.requires_manual_review = True
+        return self
+
+
+class ClinicalProcessRequest(BaseModel):
+    transcript: str = Field(..., min_length=1, description="Raw code-switched clinical transcript text")
+    language_hint: Optional[str] = Field("auto", description="Primary language pair hint")
+
+
+class ClinicalProcessResponse(BaseModel):
+    success: bool = True
+    soap: ClinicalSOAPSchema
+    scrubbed_transcript: str
+    redactions_count: int = Field(..., ge=0)
+    discrepancies: List[str] = Field(default_factory=list)
+    sign_off_required: bool = True
+
+
+CLINICAL_SYMPTOM_MAP = {
+    "fever": ["fever", "pyrexia", "high temperature", "temperature 38", "temp 38"],
+    "cough": ["cough", "productive cough", "dry cough"],
+    "shortness_of_breath": ["shortness of breath", "dyspnea", "difficulty breathing"],
+    "pain": ["pain", "headache", "abdominal pain", "chest pain"],
+    "nausea": ["nausea", "vomiting", "diarrhea", "dehydration"],
+    "wound_infection": ["wound", "pus", "discharge", "surgical site"],
+}
+
+
+def _normalize_text(value: str) -> str:
+    return (value or "").lower().replace("\n", " ")
+
+
+def validate_transcript_soap_discrepancy(transcript: str, soap: ClinicalSOAPSchema) -> List[str]:
+    """Raises a warning when obvious contradictions or omissions exist between transcript and SOAP extraction."""
+    transcript_text = _normalize_text(transcript)
+    soap_text = _normalize_text(
+        " ".join(
+            [
+                soap.subjective,
+                soap.objective,
+                soap.assessment,
+                soap.plan,
+                *[item.description for item in soap.icd10_codes],
+            ]
+        )
+    )
+    discrepancies: List[str] = []
+
+    negated_phrases = [
+        "no fever",
+        "no cough",
+        "no pain",
+        "denies fever",
+        "without fever",
+        "without cough",
+        "no shortness of breath",
+    ]
+    for symptom_name, terms in CLINICAL_SYMPTOM_MAP.items():
+        transcript_has_positive = any(term in transcript_text for term in terms)
+        transcript_has_negative = any(phrase in transcript_text for phrase in negated_phrases if symptom_name in phrase or any(term in phrase for term in terms[:2]))
+        soap_has_positive = any(term in soap_text for term in terms)
+        if transcript_has_negative and soap_has_positive:
+            discrepancies.append(f"Transcript explicitly denies {symptom_name}, but the SOAP note includes {symptom_name}.")
+        if transcript_has_positive and not soap_has_positive:
+            discrepancies.append(f"Transcript mentions {symptom_name}, but SOAP fields do not capture it.")
+
+    medication_terms = ["amoxicillin", "paracetamol", "ciprofloxacin", "metronidazole", "ibuprofen", "aspirin"]
+    transcript_has_med = any(term in transcript_text for term in medication_terms)
+    soap_has_med = any(term in soap_text for term in medication_terms)
+    if transcript_has_med and not soap_has_med:
+        discrepancies.append("Transcript names a medication, but the SOAP plan does not include the medication summary.")
+
+    return discrepancies
+
+
+def _fallback_soap(raw_transcript: str, *, reason: str = "structured output validation failed") -> ClinicalSOAPSchema:
+    safe_text = (raw_transcript or '').strip() or 'No transcript supplied.'
+    summary = safe_text[:220]
+    return ClinicalSOAPSchema(
+        subjective=f"Clinical transcript summary: {summary}",
+        objective="Pending clinician-entered vitals, physical exam, and objective findings.",
+        assessment=f"Automatic structured SOAP parsing was not valid. Reason: {reason}. Manual review required before documentation is finalized.",
+        plan="1. Verify transcript against patient encounter.\n2. Document vital signs and physical exam.\n3. Confirm assessment, medications, and follow-up plan before EMR commit.",
+        confidence_score=0.0,
+        icd10_codes=[],
+        flagged_code_switches=[],
+        requires_manual_review=True,
+        requires_manual_entry=True,
+    )
+
+
+def _coerce_soap_payload(payload: object) -> ClinicalSOAPSchema:
+    if isinstance(payload, ClinicalSOAPSchema):
+        return payload
+
+    if not isinstance(payload, dict):
+        raise TypeError("SOAP payload must be a dict")
+
+    normalized = dict(payload)
+    for key in ("requires_manual_entry", "requires_manual_review"):
+        if key in normalized and isinstance(normalized[key], bool):
+            normalized["requires_manual_entry"] = normalized.get("requires_manual_entry", False) or normalized.get("requires_manual_review", False)
+            normalized["requires_manual_review"] = normalized.get("requires_manual_review", False) or normalized.get("requires_manual_entry", False)
+            break
+
+    # Tolerate common structured-output formatting imperfections.
+    fallback_keys = {
+        "patient_summary": "subjective",
+        "history_of_present_illness": "subjective",
+        "physical_exam": "objective",
+        "plan_of_care": "plan",
+        "clinical_assessment": "assessment",
+    }
+    for old_key, new_key in fallback_keys.items():
+        if old_key in normalized and new_key not in normalized:
+            normalized[new_key] = normalized[old_key]
+
+    if "flagged_code_switches" in normalized and not isinstance(normalized["flagged_code_switches"], list):
+        normalized["flagged_code_switches"] = [str(normalized["flagged_code_switches"])]
+
+    if "icd10_codes" in normalized and isinstance(normalized["icd10_codes"], list):
+        normalized["icd10_codes"] = [
+            {"code": item.get("code", "R69"), "description": item.get("description", "Illness, unspecified")}
+            if isinstance(item, dict) else {"code": "R69", "description": "Illness, unspecified"}
+            for item in normalized["icd10_codes"]
+        ]
+
+    return ClinicalSOAPSchema.model_validate(normalized)
+
+
+def _generate_structured_soap(raw_transcript: str, *, attempts: int = 3) -> ClinicalSOAPSchema:
+    if not raw_transcript or not raw_transcript.strip():
+        return _fallback_soap(raw_transcript, reason="empty transcript")
+
+    clean = raw_transcript.strip()
+    for attempt in range(1, attempts + 1):
+        candidate = clean
+        if candidate.startswith("```"):
+            candidate = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate, flags=re.IGNORECASE)
+
+        try:
+            parsed = json.loads(candidate)
+            return _coerce_soap_payload(parsed)
+        except (TypeError, ValueError, ValidationError):
+            compact = re.search(r"\{.*\}", candidate, flags=re.DOTALL)
+            if compact:
+                try:
+                    return _coerce_soap_payload(json.loads(compact.group(0)))
+                except (TypeError, ValueError, ValidationError):
+                    pass
+            if attempt < attempts:
+                candidate = candidate.replace("'", '"').replace("\n", " ")
+                clean = candidate
+                continue
+
+    return _fallback_soap(raw_transcript, reason="retries exhausted")
+
+
+def _scrub_transcript(transcript: str) -> Tuple[str, int]:
+    """Remove common direct identifiers before a transcript is echoed or stored."""
+    patterns = (
+        (r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[REDACTED EMAIL]"),
+        (r"\b(?:\+?251|0)?9\d{8}\b", "[REDACTED PHONE]"),
+    )
+    scrubbed = transcript
+    redactions = 0
+    for pattern, replacement in patterns:
+        scrubbed, count = re.subn(pattern, replacement, scrubbed, flags=re.IGNORECASE)
+        redactions += count
+    return scrubbed, redactions
+
+
+def get_fallback_soap(raw_transcript: str) -> ClinicalSOAPSchema:
+    """
+    Guarantees deterministic system recovery when LLM parsing or schema validation fails.
+    Prevents application crashes during non-standard transcript inputs.
+    """
+    return _generate_structured_soap(raw_transcript, attempts=3)
+
+
+@app.post("/api/v1/clinical/process-text", response_model=ClinicalProcessResponse)
+async def process_clinical_text(payload: ClinicalProcessRequest) -> ClinicalProcessResponse:
+    """Validate all SOAP output against the strict clinical schema and degrade gracefully without 500s."""
+    scrubbed_transcript, redactions_count = _scrub_transcript(payload.transcript)
+
+    try:
+        soap = _generate_structured_soap(scrubbed_transcript, attempts=3)
+    except Exception:
+        soap = _fallback_soap(scrubbed_transcript, reason="exception while building SOAP")
+
+    discrepancies = validate_transcript_soap_discrepancy(scrubbed_transcript, soap)
+    return ClinicalProcessResponse(
+        soap=soap,
+        scrubbed_transcript=scrubbed_transcript,
+        redactions_count=redactions_count,
+        discrepancies=discrepancies,
+        sign_off_required=bool(discrepancies) or soap.requires_manual_review or soap.requires_manual_entry,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1191,6 +1443,16 @@ async def health_check():
         "intron_configured": bool(INTRON_API_KEY),
         "boost_phrases_loaded": len(ETHIOPIAN_MEDICAL_VOCABULARY)
     }
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readyz():
+    return {"status": "ready"}
 
 @app.post("/api/v1/transcribe")
 async def transcribe_audio(

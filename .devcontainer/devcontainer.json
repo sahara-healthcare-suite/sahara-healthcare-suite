@@ -1,0 +1,35 @@
+{
+  "name": "Sahara Healthcare Suite",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "forwardPorts": [8000, 8001],
+  "portsAttributes": {
+    "8000": {
+      "label": "FastAPI proxy",
+      "onAutoForward": "notify"
+    },
+    "8001": {
+      "label": "Health checks",
+      "onAutoForward": "silent"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "postCreateCommand": "python -m pip install --upgrade pip && python -m pip install -r requirements.txt",
+  "containerEnv": {
+    "PYTHONPATH": "/workspaces/sahara-healthcare-suite",
+    "ALLOWED_ORIGINS": "https://sahara-healthcare-suite.pages.dev,https://sahara-healthcare-suite-1.pages.dev,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000"
+  },
+  "remoteUser": "vscode"
+}

@@ -327,6 +327,16 @@
                 </button>
               </div>
             </div>
+            <div id="clinical-signoff-panel" class="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-100">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Clinician Verification Gate</span>
+                <span id="signoff-status" class="text-[10px] font-medium text-amber-200">Awaiting sign-off</span>
+              </div>
+              <button id="btn-signoff-clinician" onclick="verifyClinicianSignOff()" class="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold px-3 py-2 rounded transition">
+                <i class="fa-solid fa-user-check mr-2"></i>Verify &amp; Sign Off
+              </button>
+              <div id="discrepancy-panel" class="mt-3 text-[10px] text-amber-100/90 hidden"></div>
+            </div>
             <div class="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label class="text-slate-500 block mb-1">Chief Complaint</label>
@@ -684,6 +694,89 @@
   let workletNode = null;
   let websocket = null;
   let audioContext = null;
+  let websocketRetryDelayMs = 100;
+  let websocketReconnectTimer = null;
+  let lastAckTs = 0;
+  const OFFLINE_DB_NAME = 'sahara-healthcare-suite';
+  const OFFLINE_STORE_NAME = 'offline-sync-queue';
+
+  function openOfflineQueueDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(OFFLINE_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(OFFLINE_STORE_NAME)) {
+          db.createObjectStore(OFFLINE_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function persistOfflineRecord(record) {
+    if (!('indexedDB' in window)) return;
+    const db = await openOfflineQueueDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(OFFLINE_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(OFFLINE_STORE_NAME);
+      const request = store.put({ ...record, savedAt: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function flushOfflineQueue() {
+    if (!('indexedDB' in window) || navigator.onLine === false) return;
+    const db = await openOfflineQueueDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(OFFLINE_STORE_NAME, 'readonly');
+      const store = tx.objectStore(OFFLINE_STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const records = request.result || [];
+        if (!records.length) {
+          resolve();
+          return;
+        }
+        try {
+          const worker = new Worker('offline-sync-worker.js');
+          worker.postMessage({ type: 'flush' });
+          worker.onmessage = () => {
+            const clearTx = db.transaction(OFFLINE_STORE_NAME, 'readwrite');
+            clearTx.objectStore(OFFLINE_STORE_NAME).clear();
+            resolve();
+          };
+        } catch (error) {
+          reject(error);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  window.addEventListener('online', () => flushOfflineQueue());
+  window.addEventListener('offline', () => {
+    console.warn('Offline: local edge queue activated for queued audio/transcript recovery.');
+  });
+
+  function scheduleWebSocketReconnect() {
+    if (websocketReconnectTimer || !isRecordingTriage) return;
+
+    const jitterFraction = 1 + (Math.random() * 0.4 - 0.2);
+    const delay = Math.min(3000, Math.max(100, websocketRetryDelayMs * jitterFraction));
+
+    websocketReconnectTimer = setTimeout(async () => {
+      websocketReconnectTimer = null;
+      try {
+        await initWebSocket();
+        websocketRetryDelayMs = 100;
+      } catch (error) {
+        websocketRetryDelayMs = Math.min(websocketRetryDelayMs * 2, 3000);
+        scheduleWebSocketReconnect();
+      }
+    }, delay);
+  }
 
   function initWebSocket() {
     if (websocket && websocket.readyState === WebSocket.OPEN) {
@@ -696,24 +789,52 @@
         : `${window.location.protocol === 'https:' ? 'https:' : 'http:'}//${window.location.hostname}:8000`
     );
     const apiUrl = new URL(apiOrigin);
+    const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (!isSecureContext && apiUrl.protocol === 'https:') {
+      throw new Error('Secure WebSocket transport is required for production healthcare traffic.');
+    }
     const protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
     return new Promise((resolve, reject) => {
       websocket = new WebSocket(`${protocol}//${apiUrl.host}/ws/stream`);
       websocket.onopen = () => {
         console.log('WebSocket connected');
+        if (lastAckTs > 0) {
+          websocket.send(JSON.stringify({ type: 'resume', ack_ts: lastAckTs }));
+        }
         const status = document.getElementById('mic-status');
-        if (status && isRecordingTriage) status.innerText = 'Connected. Listening to code-switched audio stream...';
+        if (status && isRecordingTriage) {
+          status.dataset.baseStatus = 'Connected. Listening to code-switched audio stream...';
+          status.innerText = status.dataset.baseStatus;
+        }
         resolve(websocket);
       };
       websocket.onmessage = (event) => {
         try {
-          const payload = JSON.parse(event.data);
-          if (payload.transcript) {
-            const transcript = document.getElementById('triage-transcript');
-            if (transcript) transcript.innerText = payload.transcript;
-            renderTriageFromTranscript(payload.transcript);
+          const payload = typeof event.data === 'string' ? JSON.parse(event.data) : null;
+          if (payload && typeof payload.ack_ts === 'number') {
+            lastAckTs = payload.ack_ts;
+            if (workletNode) {
+              workletNode.port.postMessage({ command: 'ACK', ackTimestamp: lastAckTs });
+            }
           }
-          if (payload.artifacts?.safety_review) {
+          if (payload && payload.transcript) {
+            const now = performance.now();
+            if (firstAudioFrameSentAt !== null && !Number.isFinite(faasMs)) {
+              faasMs = now - firstAudioFrameSentAt;
+            }
+            if (lastPartialTranscriptAt !== null) {
+              partialTokenDelayMs = now - lastPartialTranscriptAt;
+            }
+            lastPartialTranscriptAt = now;
+            if (!navigator.onLine) {
+              persistOfflineRecord({ type: 'transcript', transcript: payload.transcript, timestamp: Date.now() });
+            }
+            const transcript = document.getElementById('triage-transcript');
+            if (transcript) renderGuardedTranscript(payload.transcript, 'triage-transcript');
+            renderTriageFromTranscript(payload.transcript);
+            updateStreamingLatencyUI();
+          }
+          if (payload && payload.artifacts?.safety_review) {
             renderSafetyReview(payload.artifacts.safety_review);
           }
         } catch (error) {
@@ -729,8 +850,12 @@
       websocket.onclose = () => {
         console.log('WebSocket closed');
         const status = document.getElementById('mic-status');
-        if (status && isRecordingTriage) status.innerText = 'Speech service disconnected before transcription completed.';
+        if (status && isRecordingTriage) {
+          status.dataset.baseStatus = 'Speech service disconnected. Reconnecting with resilient packet replay...';
+          status.innerText = status.dataset.baseStatus;
+        }
         websocket = null;
+        scheduleWebSocketReconnect();
       };
     });
   }
@@ -799,7 +924,7 @@
         : await initWebSocket();
 
       mediaStream = existingStream || await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
       await audioContext.audioWorklet.addModule('pcm-processor.js');
 
@@ -808,7 +933,31 @@
 
       workletNode.port.onmessage = (event) => {
         if (connectedSocket.readyState === WebSocket.OPEN) {
-          connectedSocket.send(event.data);
+          const packet = event.data;
+          if (!packet || !packet.pcmBuffer) return;
+          if (firstAudioFrameSentAt === null) {
+            firstAudioFrameSentAt = performance.now();
+            window.__streamingMetrics.first_audio_sent_at = firstAudioFrameSentAt;
+          }
+
+          const metadata = JSON.stringify({
+            type: 'audio_meta',
+            sequence: packet.sequence,
+            timestamp_ms: packet.timestamp,
+            ack_ts: lastAckTs
+          });
+
+          if (!navigator.onLine) {
+            persistOfflineRecord({
+              type: 'audio',
+              sequence: packet.sequence,
+              timestamp_ms: packet.timestamp,
+              buffer: Array.from(new Uint8Array(packet.pcmBuffer))
+            });
+          }
+
+          connectedSocket.send(metadata);
+          connectedSocket.send(packet.pcmBuffer);
         }
       };
 
@@ -836,6 +985,23 @@
   }
   let benchmarkChartInstance = null;
   let isRecordingTriage = false;
+  let firstAudioFrameSentAt = null;
+  let lastPartialTranscriptAt = null;
+  let faasMs = null;
+  let partialTokenDelayMs = null;
+  window.__streamingMetrics = { faas_ms: null, partial_token_delay_ms: null, first_audio_sent_at: null };
+
+  function updateStreamingLatencyUI() {
+    const statusEl = document.getElementById('mic-status');
+    window.__streamingMetrics.faas_ms = Number.isFinite(faasMs) ? faasMs : null;
+    window.__streamingMetrics.partial_token_delay_ms = Number.isFinite(partialTokenDelayMs) ? partialTokenDelayMs : null;
+    if (!statusEl) return;
+    const parts = [];
+    if (Number.isFinite(faasMs)) parts.push(`FAAS ${faasMs.toFixed(0)}ms`);
+    if (Number.isFinite(partialTokenDelayMs)) parts.push(`Partial ${partialTokenDelayMs.toFixed(0)}ms`);
+    if (!parts.length) return;
+    statusEl.innerText = `${parts.join(' • ')} • ${statusEl.dataset.baseStatus || 'Streaming live'}`;
+  }
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -1183,7 +1349,7 @@
       const symptomsEl = document.getElementById('triage-symptoms');
       const badgeEl = document.getElementById('triage-level-badge');
       const recEl = document.getElementById('triage-recommendation');
-      if (transcriptEl) transcriptEl.innerText = `"${caseData.json.code_switched_verbatim}"`;
+      if (transcriptEl) renderGuardedTranscript(`"${caseData.json.code_switched_verbatim}"`, 'triage-transcript');
       if (confEl) confEl.innerText = `Confidence: ${(96.2 + presetNum * 0.8).toFixed(1)}%`;
       if (symptomsEl) {
         symptomsEl.innerHTML = caseData.json.symptoms.map(s =>
@@ -1221,7 +1387,7 @@
       if (!isRecordingTriage) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          reviewAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          reviewAudioContext = new (window.AudioContext || window.webkitAudioContext)();
           reviewAudioSource = reviewAudioContext.createMediaStreamSource(stream);
           reviewAudioProcessor = reviewAudioContext.createScriptProcessor(4096, 1, 1);
           reviewAudioBuffers = [];
@@ -1334,6 +1500,7 @@
     }
 
     function populateEHRDemo() {
+      window.clinicalSignOffVerified = false;
       const box = document.getElementById('ehr-transcript-box');
       if (box) {
         box.innerHTML = `
@@ -1351,14 +1518,15 @@
       document.getElementById('ehr-meds').value = "1. Amoxicillin 500mg TID x 7 Days\n2. Paracetamol 500mg PRN for Fever";
       const icd = document.getElementById('ehr-icd');
       if (icd) icd.innerText = "ICD-10 Code: R07.9 (Unspecified Chest Pain) / Pyrexia R50.9";
-      const syncBtn = document.getElementById('btn-sync-ehr');
-      if (syncBtn) {
-        syncBtn.disabled = false;
-        syncBtn.className = "bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-2 shadow-lg shadow-emerald-500/20";
-      }
+      updateClinicianSignoffUI();
+      renderDiscrepancyPanel(box ? box.innerText : '', document.getElementById('ehr-cc')?.value || '');
     }
 
     function triggerEHRSync() {
+      if (!window.clinicalSignOffVerified) {
+        alert('Clinician sign-off is required before committing patient data to the EHR or exporting HL7 FHIR records.');
+        return;
+      }
       const syncBtn = document.getElementById('btn-sync-ehr');
       if (syncBtn) {
         syncBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Syncing to OpenMRS FHIR...`;
@@ -1397,6 +1565,132 @@
       return s.replace(/\b\w/g, c => c.toUpperCase());
     }
 
+    window.clinicalSignOffVerified = false;
+
+    function updateClinicianSignoffUI() {
+      const signoffStatus = document.getElementById('signoff-status');
+      const signoffButton = document.getElementById('btn-signoff-clinician');
+      const commitButton = document.getElementById('btn-sync-ehr');
+      if (signoffStatus) {
+        signoffStatus.innerText = window.clinicalSignOffVerified ? 'Verified & signed' : 'Awaiting sign-off';
+        signoffStatus.className = window.clinicalSignOffVerified
+          ? 'text-[10px] font-medium text-emerald-200'
+          : 'text-[10px] font-medium text-amber-200';
+      }
+      if (signoffButton) {
+        signoffButton.innerHTML = window.clinicalSignOffVerified
+          ? '<i class="fa-solid fa-check-circle mr-2"></i>Signed Off'
+          : '<i class="fa-solid fa-user-check mr-2"></i>Verify &amp; Sign Off';
+        signoffButton.disabled = window.clinicalSignOffVerified;
+        signoffButton.className = window.clinicalSignOffVerified
+          ? 'w-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-100 text-[11px] font-bold px-3 py-2 rounded transition cursor-default'
+          : 'w-full bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold px-3 py-2 rounded transition';
+      }
+      if (commitButton) {
+        commitButton.disabled = !window.clinicalSignOffVerified;
+        commitButton.className = window.clinicalSignOffVerified
+          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-2 shadow-lg shadow-emerald-500/20'
+          : 'bg-emerald-600 disabled:opacity-50 hover:bg-emerald-500 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-2';
+      }
+    }
+
+    function getLowConfidenceTranscriptSpans(text) {
+      const normalized = String(text || '').trim();
+      if (!normalized) return [];
+      const phrases = normalized.split(/(\s+)/);
+      const flagged = [];
+      const ambiguousTerms = ['syamenagn', 'saye', 'al', 'ቁርጠት', 'honesal', 'asthma', 'gall', 'wound', 'amoxicillin', 'paracetamol'];
+      let buffer = '';
+      let index = 0;
+      phrases.forEach((phrase) => {
+        if (!phrase) return;
+        buffer += phrase;
+        const phraseText = buffer.trim();
+        if (phraseText && ambiguousTerms.some(term => phraseText.toLowerCase().includes(term.toLowerCase()))) {
+          flagged.push({ index, text: phraseText, confidence: 0.68 });
+          buffer = '';
+        }
+        index += 1;
+      });
+      return flagged;
+    }
+
+    function renderGuardedTranscript(text, targetId = 'triage-transcript') {
+      const container = document.getElementById(targetId);
+      if (!container) return;
+      const source = String(text || '').trim();
+      const segments = source ? source.split(/\s+/) : [];
+      if (!segments.length) {
+        container.innerHTML = '<span class="text-slate-500">Transcript waiting...</span>';
+        return;
+      }
+      const lowConfidence = getLowConfidenceTranscriptSpans(source);
+      container.innerHTML = segments.map((segment) => {
+        const token = segment.replace(/[.,!?]/g, '');
+        const flagged = lowConfidence.some(({ text }) => text.toLowerCase().includes(token.toLowerCase()));
+        return flagged
+          ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician must verify before export.">${segment}</span>`
+          : `<span class="text-slate-200">${segment}</span>`;
+      }).join(' ');
+    }
+
+    function validateTranscriptSoapDiscrepancy(transcriptText, soapText = '') {
+      const transcript = String(transcriptText || '').toLowerCase();
+      const soap = String(soapText || '').toLowerCase();
+      const warnings = [];
+      const negativePatterns = ['no fever', 'no cough', 'denies fever', 'without fever', 'no pain'];
+      const symptomTerms = [
+        ['fever', 'pyrexia', 'temperature 38', 'high temperature'],
+        ['cough', 'productive cough'],
+        ['pain', 'headache', 'chest pain'],
+        ['vomiting', 'diarrhea', 'dehydration']
+      ];
+
+      symptomTerms.forEach(([primary, ...rest]) => {
+        const symptomTermsList = [primary, ...rest];
+        const transcriptHasPositive = symptomTermsList.some(term => transcript.includes(term));
+        const transcriptHasNegative = negativePatterns.some(phrase => transcript.includes(phrase) && symptomTermsList.some(term => phrase.includes(term)));
+        const soapHasPositive = symptomTermsList.some(term => soap.includes(term));
+        if (transcriptHasNegative && soapHasPositive) {
+          warnings.push(`Transcript denies ${primary}, but SOAP note includes ${primary}.`);
+        }
+        if (transcriptHasPositive && !soapHasPositive) {
+          warnings.push(`Transcript mentions ${primary}, but the SOAP summary omits it.`);
+        }
+      });
+
+      if ((transcript.includes('amoxicillin') || transcript.includes('paracetamol')) && !soap.includes('amoxicillin') && !soap.includes('paracetamol')) {
+        warnings.push('Transcript names a medication but SOAP summary does not include it.');
+      }
+
+      return warnings;
+    }
+
+    function renderDiscrepancyPanel(transcriptText, soapText = '') {
+      const panel = document.getElementById('discrepancy-panel');
+      if (!panel) return;
+      const warnings = validateTranscriptSoapDiscrepancy(transcriptText, soapText);
+      if (!warnings.length) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+      }
+      panel.classList.remove('hidden');
+      panel.innerHTML = warnings.map((warning) => `<div>• ${warning}</div>`).join('');
+    }
+
+    function verifyClinicianSignOff() {
+      window.clinicalSignOffVerified = true;
+      updateClinicianSignoffUI();
+      const transcriptBox = document.getElementById('ehr-transcript-box');
+      const transcriptText = transcriptBox ? transcriptBox.innerText : '';
+      renderDiscrepancyPanel(transcriptText, document.getElementById('ehr-cc')?.value || '');
+      const syncBtn = document.getElementById('btn-sync-ehr');
+      if (syncBtn) {
+        syncBtn.disabled = false;
+      }
+    }
+
     function ehrSetStatus(text) {
       const el = document.getElementById('ehr-record-status');
       if (el) el.innerText = text;
@@ -1408,9 +1702,20 @@
       const placeholder = box.querySelector('.italic');
       if (placeholder) box.innerHTML = "";
       const p = document.createElement('p');
-      p.textContent = text;
+      const safeText = String(text).trim();
+      const lowConfidence = getLowConfidenceTranscriptSpans(safeText);
+      p.innerHTML = lowConfidence.length
+        ? safeText.split(/\s+/).map((segment) => {
+          const token = segment.replace(/[.,!?]/g, '');
+          const flagged = lowConfidence.some(({ text }) => text.toLowerCase().includes(token.toLowerCase()));
+          return flagged
+            ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician verification required.">${segment}</span>`
+            : `<span class="text-slate-200">${segment}</span>`;
+        }).join(' ')
+        : safeText;
       box.appendChild(p);
       box.scrollTop = box.scrollHeight;
+      renderDiscrepancyPanel(safeText, document.getElementById('ehr-cc')?.value || '');
     }
 
     function extractEHRFields(text) {
@@ -2151,6 +2456,10 @@
     }
 
     function exportFhirJson() {
+      if (!window.clinicalSignOffVerified) {
+        alert('A signed clinician review is required before exporting HL7 FHIR records.');
+        return;
+      }
       const fhirPayload = {
         "resourceType": "Bundle",
         "type": "collection",
@@ -2170,6 +2479,10 @@
     }
 
     function downloadClinicalSummary() {
+      if (!window.clinicalSignOffVerified) {
+        alert('A signed clinician review is required before saving or exporting a clinical summary.');
+        return;
+      }
       const cc = document.getElementById('ehr-cc')?.value || "Chest Pain & Headache";
       const duration = document.getElementById('ehr-duration')?.value || "2 Days";
       const bp = document.getElementById('ehr-bp')?.value || "140/90";
@@ -2214,6 +2527,7 @@ Digital Signoff  : Dr. Tadesse (Duty Clinician)
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      updateClinicianSignoffUI();
       loadVoicesOnce();
       initBenchmarkChart();
       onCaseSelectChange();

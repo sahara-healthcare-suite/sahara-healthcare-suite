@@ -3,8 +3,9 @@
 ## 1. System purpose
 
 AfriHealth AI is a browser-based clinical voice documentation and
-decision-support prototype for community health workers and clinicians. It
-supports English, Amharic-English, and Afaan Oromoo-English code-switching.
+decision-support prototype for community health workers and clinicians. The
+current release focuses on Amharic-English code-switching. Afaan Oromoo,
+Tigrinya, and other language pairs are future expansion targets.
 The system produces draft transcripts and clinician-review artifacts; it is
 not an autonomous diagnostic or prescribing service.
 
@@ -25,6 +26,7 @@ Browser (index.html)
           |-- server-side FHIR export and optional EHR commit
           |-- synchronous TTS generation and status bridges
           |-- clinical artifact and medication safety gate
+          |-- edge persistence adapter (Cloudflare D1 or local SQLite fallback)
           |
           +--> Intron Sahara STT/TTS APIs
           +--> Configured FHIR/EHR endpoint (optional)
@@ -89,6 +91,14 @@ simulated reference cases and emits only aggregate metrics plus critical-term
 miss counts. The recordings may be reused for benchmarking, error analysis,
 and terminology improvement, but the evaluator does not train a model or
 support autonomous clinical decisions.
+
+### Durable stream sync
+
+Each live stream receives a session ID and clinic ID. Partial and committed
+transcripts are stored as metadata in Cloudflare D1 when
+`CLOUDFLARE_D1_API_URL` and `CLOUDFLARE_D1_API_TOKEN` are configured; local
+development falls back to `EDGE_SQLITE_PATH`. Raw audio is never stored by
+this layer. The schema is created automatically at service startup.
 
 The separate clinical validation audit form is intentionally not exposed in
 the public application navigation. The product demo focuses on the three care

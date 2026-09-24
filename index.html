@@ -272,6 +272,60 @@
             </div>
           </div>
         </div>
+        <section class="mt-6 bg-[#10192d] rounded-xl border border-slate-800 p-5" aria-labelledby="soap-panel-title">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h3 id="soap-panel-title" class="text-sm font-bold text-white">Structured SOAP Encounter &amp; Diagnostic Output</h3>
+              <p class="text-[11px] text-slate-500 mt-1">Editable clinical draft. Streaming updates fill fields that have not been manually changed.</p>
+            </div>
+            <span id="soap-status-badge" class="inline-flex items-center w-fit rounded-md bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">Draft (Pending Verification)</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            <div>
+              <label for="soap-transcript" class="text-[10px] font-bold uppercase tracking-wider text-teal-300">Live Code-Switched Transcript Stream:</label>
+              <textarea id="soap-transcript" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-[#080d19] p-3 text-xs font-mono leading-relaxed text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Live Amharic-English transcript will appear here..."></textarea>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label for="soap-subjective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">S - Subjective (Symptoms):</label>
+                <textarea id="soap-subjective" data-soap-field="subjective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Patient-reported symptoms, complaints, and duration..."></textarea>
+              </div>
+              <div>
+                <label for="soap-objective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">O - Objective (Observations/Vitals):</label>
+                <textarea id="soap-objective" data-soap-field="objective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Vitals and examination observations..."></textarea>
+              </div>
+              <div>
+                <label for="soap-assessment" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">A - Assessment (ICD-10 Code):</label>
+                <textarea id="soap-assessment" data-soap-field="assessment" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Diagnosis, ICD-10 mapping, and confidence..."></textarea>
+              </div>
+              <div>
+                <label for="soap-plan" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">P - Plan &amp; Prescription (Stewardship):</label>
+                <textarea id="soap-plan" data-soap-field="plan" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Medication, dosage, stewardship guidance, and follow-up..."></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-slate-800 pt-4">
+            <div class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+              <i class="fa-solid fa-triangle-exclamation mt-0.5 text-amber-300"></i>
+              <span>Human-In-The-Loop Safeguard Required | AI-generated draft. Physician verification is required before FHIR EMR sync.</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="previewSoapFhirJson()" class="rounded-lg border border-teal-500/30 bg-slate-900 px-3 py-2 text-[11px] font-bold text-teal-300 transition hover:bg-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-file-code"></i> Preview FHIR JSON
+              </button>
+              <button id="soap-signoff-button" onclick="verifySoapRecord()" class="rounded-lg bg-amber-400 px-3 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-amber-300 flex items-center gap-2">
+                <i class="fa-solid fa-user-check"></i> Verify &amp; Sign Off Record
+              </button>
+            </div>
+          </div>
+          <div class="hidden mt-4 rounded-lg border border-teal-500/30 bg-[#080d19] p-3" aria-live="polite">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-teal-300">FHIR JSON Preview</span>
+              <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-slate-500 hover:text-white" title="Close FHIR preview"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <pre id="soap-fhir-preview" class="max-h-64 overflow-auto whitespace-pre-wrap text-[10px] text-slate-300"></pre>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -870,8 +924,13 @@
       throw new Error('Secure WebSocket transport is required for production healthcare traffic.');
     }
     const protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    const clinicId = window.SAHARA_CLINIC_ID || localStorage.getItem('sahara-clinic-id') || 'default-clinic';
+    const streamQuery = new URLSearchParams({
+      use_language_asr_input: 'am',
+      clinic_id: clinicId,
+    });
     return new Promise((resolve, reject) => {
-      websocket = new WebSocket(`${protocol}//${apiUrl.host}/ws/stream`);
+      websocket = new WebSocket(`${protocol}//${apiUrl.host}/ws/stream?${streamQuery.toString()}`);
       websocket.onopen = () => {
         console.log('WebSocket connected');
         if (lastAckTs > 0) {
@@ -1621,6 +1680,12 @@
       document.getElementById('ehr-meds').value = "1. Amoxicillin 500mg TID x 7 Days\n2. Paracetamol 500mg PRN for Fever";
       const icd = document.getElementById('ehr-icd');
       if (icd) icd.innerText = "ICD-10 Code: R07.9 (Unspecified Chest Pain) / Pyrexia R50.9";
+      soapManualFields.clear();
+      setSoapVerificationState(false);
+      updateSoapState({
+        transcript: 'Doctor: Tell me about the main issue today.\nPatient: Chest pain syamenagn 2 days honesal. Very headache also.\nDoctor: Vitals checked: BP 140/90 mmHg, Pulse 88 bpm, Temp 37.8 C.\nDoctor: Prescribing Amoxicillin 500mg and Paracetamol 500mg.'
+      });
+      populateSoapFromClinicalFields(soapState.transcript);
       updateClinicianSignoffUI();
       renderDiscrepancyPanel(box ? box.innerText : '', document.getElementById('ehr-cc')?.value || '');
     }
@@ -1637,6 +1702,7 @@
         temperature: document.getElementById('ehr-temp')?.value || null,
         diagnosis_code: 'R07.9',
         diagnosis_display: 'Chest pain, unspecified',
+        soap: { ...soapState },
         medications: (document.getElementById('ehr-meds')?.value || '')
           .split('\n')
           .map((item) => item.replace(/^\d+\.\s*/, '').trim())
@@ -1680,6 +1746,97 @@
     let ehrMediaRecorder = null;
     let ehrAudioChunks = [];
     let ehrLiveTranscript = "";
+    const soapState = {
+      transcript: '',
+      subjective: '',
+      objective: '',
+      assessment: '',
+      plan: ''
+    };
+    const soapManualFields = new Set();
+    let soapRecordVerified = false;
+
+    function updateSoapState(patch, { fromStream = false } = {}) {
+      Object.entries(patch).forEach(([key, value]) => {
+        if (!(key in soapState)) return;
+        if (fromStream && key !== 'transcript' && soapManualFields.has(key)) return;
+        soapState[key] = String(value || '');
+        const field = document.getElementById(`soap-${key}`);
+        if (field && document.activeElement !== field) field.value = soapState[key];
+      });
+    }
+
+    function onSoapFieldChange(event) {
+      const fieldName = event.target.dataset.soapField;
+      if (!fieldName || soapRecordVerified) return;
+      soapManualFields.add(fieldName);
+      updateSoapState({ [fieldName]: event.target.value });
+    }
+
+    function onStreamUpdate(payload) {
+      const transcript = typeof payload === 'string' ? payload : payload?.transcript;
+      if (!transcript) return;
+      updateSoapState({ transcript }, { fromStream: true });
+    }
+
+    function populateSoapFromClinicalFields(transcriptText) {
+      const cc = document.getElementById('ehr-cc')?.value || '';
+      const duration = document.getElementById('ehr-duration')?.value || '';
+      const bp = document.getElementById('ehr-bp')?.value || '';
+      const pulse = document.getElementById('ehr-pulse')?.value || '';
+      const temp = document.getElementById('ehr-temp')?.value || '';
+      const medications = document.getElementById('ehr-meds')?.value || '';
+      const icd = document.getElementById('ehr-icd')?.innerText || '';
+      updateSoapState({
+        transcript: transcriptText,
+        subjective: [cc && `Chief complaint: ${cc}`, duration && `Duration: ${duration}`].filter(Boolean).join('\n'),
+        objective: [bp && `BP: ${bp}`, pulse && `Pulse: ${pulse}`, temp && `Temperature: ${temp}`].filter(Boolean).join('\n'),
+        assessment: icd === 'Awaiting consultation processing...' ? '' : icd,
+        plan: medications
+      }, { fromStream: true });
+    }
+
+    function setSoapVerificationState(verified) {
+      soapRecordVerified = verified;
+      const status = document.getElementById('soap-status-badge');
+      const button = document.getElementById('soap-signoff-button');
+      document.querySelectorAll('[data-soap-field], #soap-transcript').forEach((field) => {
+        field.disabled = verified;
+        field.classList.toggle('opacity-70', verified);
+      });
+      if (status) {
+        status.innerText = verified ? 'Verified & Signed' : 'Draft (Pending Verification)';
+        status.className = verified
+          ? 'inline-flex items-center w-fit rounded-md bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300'
+          : 'inline-flex items-center w-fit rounded-md bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300';
+      }
+      if (button) {
+        button.disabled = verified;
+        button.innerHTML = verified
+          ? '<i class="fa-solid fa-check"></i> Record Verified'
+          : '<i class="fa-solid fa-user-check"></i> Verify &amp; Sign Off Record';
+      }
+    }
+
+    async function verifySoapRecord() {
+      if (!soapState.transcript.trim() && !soapState.subjective.trim()) {
+        alert('A transcript or subjective note is required before sign-off.');
+        return;
+      }
+      window.clinicalSignOffVerified = true;
+      setSoapVerificationState(true);
+      updateClinicianSignoffUI();
+      renderDiscrepancyPanel(soapState.transcript, soapState.subjective);
+      await triggerEHRSync();
+    }
+
+    function previewSoapFhirJson() {
+      const preview = document.getElementById('soap-fhir-preview');
+      const payload = buildFhirRequest();
+      if (!preview) return;
+      preview.textContent = JSON.stringify(payload, null, 2);
+      preview.parentElement.classList.remove('hidden');
+    }
 
     const EHR_MED_VOCAB = [
       "Paracetamol", "Amoxicillin", "Ciprofloxacin", "Metronidazole",
@@ -1818,6 +1975,7 @@
 
     function verifyClinicianSignOff() {
       window.clinicalSignOffVerified = true;
+      setSoapVerificationState(true);
       updateClinicianSignoffUI();
       const transcriptBox = document.getElementById('ehr-transcript-box');
       const transcriptText = transcriptBox ? transcriptBox.innerText : '';
@@ -1840,6 +1998,7 @@
       if (placeholder) box.innerHTML = "";
       const p = document.createElement('p');
       const safeText = String(text).trim();
+      onStreamUpdate({ transcript: `${soapState.transcript}${soapState.transcript ? '\n' : ''}${safeText}` });
       const lowConfidence = getLowConfidenceTranscriptSpans(safeText);
       p.innerHTML = lowConfidence.length
         ? safeText.split(/\s+/).map((segment) => {
@@ -1900,6 +2059,7 @@
         const icdEl = document.getElementById('ehr-icd');
         if (icdEl) icdEl.innerText = `ICD-10 Code: ${icdMatch.code} (${icdMatch.label})`;
       }
+      populateSoapFromClinicalFields(soapState.transcript || raw);
       const syncBtn = document.getElementById('btn-sync-ehr');
       if (syncBtn && chiefComplaint) {
         syncBtn.disabled = false;
@@ -1933,6 +2093,9 @@
         return;
       }
       ehrLiveTranscript = "";
+      soapManualFields.clear();
+      setSoapVerificationState(false);
+      updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
       const box = document.getElementById('ehr-transcript-box');
       if (box) box.innerHTML = "";
       const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2658,6 +2821,12 @@ Digital Signoff  : Dr. Tadesse (Duty Clinician)
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-soap-field]').forEach((field) => {
+        field.addEventListener('input', onSoapFieldChange);
+      });
+      document.getElementById('soap-transcript')?.addEventListener('input', (event) => {
+        if (!soapRecordVerified) updateSoapState({ transcript: event.target.value });
+      });
       updateClinicianSignoffUI();
       loadVoicesOnce();
       initBenchmarkChart();

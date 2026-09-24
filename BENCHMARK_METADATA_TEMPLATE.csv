@@ -1,4 +1,4 @@
 sample_id,language_pair,consent_obtained,de_identified,audio_license_or_source,annotator_count,reference_verified,notes
 sample_001,English-Amharic Code-Switch,,,,,,
-sample_002,English-Afaan Oromoo Code-Switch,,,,,,
+sample_002,English-Amharic Code-Switch,,,,,,
 sample_003,English Clinical Standard,,,,,,

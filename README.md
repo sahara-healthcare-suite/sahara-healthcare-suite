@@ -2,7 +2,7 @@
 
 > Sahara Healthcare Suite
 
-A multilingual clinical documentation platform designed to reduce clinician workload, accelerate patient intake, and improve documentation quality in African healthcare environments.
+A clinician-reviewed Amharic-English code-switched clinical documentation platform designed to reduce clinician workload, accelerate patient intake, and improve documentation quality in African healthcare environments.
 
 [![Live Application](https://img.shields.io/badge/Live-Application-blue?style=for-the-badge)](https://sahara-healthcare-suite.pages.dev/)
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge)](https://github.com/sahara-healthcare-suite/sahara-healthcare-suite)
@@ -23,7 +23,7 @@ A multilingual clinical documentation platform designed to reduce clinician work
 
 ## Overview
 
-Sahara Healthcare Suite is a clinician-facing documentation platform designed for multilingual and code-switched clinical conversations in African healthcare settings. It captures patient audio, transcribes clinical speech in context, and supports downstream review workflows for SOAP notes, triage, coding, and FHIR-compatible exports.
+Sahara Healthcare Suite is a clinician-facing documentation platform focused on Amharic-English code-switched clinical conversations. It captures patient audio, transcribes clinical speech in context, and supports downstream review workflows for editable SOAP notes, triage, coding, benchmarking, and FHIR-compatible exports. Other language pairs are future expansion targets.
 
 The system is built around a static frontend and a secure FastAPI gateway that keeps sensitive credentials, such as the Intron API key, out of the browser while enabling real-time clinical processing at edge scale.
 
@@ -32,7 +32,7 @@ The system is built around a static frontend and a secure FastAPI gateway that k
 ## Why it matters
 
 - Reduces documentation burden for clinicians working in high-volume care settings
-- Supports multilingual and code-switched conversations common in African clinical practice
+- Supports Amharic-English code-switched conversations in the current release
 - Improves time-to-note generation for patient intake, follow-up, and triage workflows
 - Creates a safer, review-first documentation pipeline for clinical AI assistance
 - Enables interoperability with FHIR-ready export structures for downstream health systems
@@ -42,27 +42,26 @@ The system is built around a static frontend and a secure FastAPI gateway that k
 ## Key capabilities
 
 - Real-time audio capture and playback in the browser
-- Multilingual and code-switched speech support for African clinical settings
+- Amharic-English code-switched speech support for clinical settings
 - Secure backend transcription proxy with server-side API key handling
 - Human-in-the-loop clinical review workflow for transcripts and structured outputs
+- Editable SOAP encounter panel with clinician sign-off and FHIR Composition output
 - FHIR-ready export generation for interoperability
 - Optional EHR submission when configured by deployment
+- Intron-focused live audio benchmark with transcript-only or reference-scored WER/CER
+- Local SQLite fallback or Cloudflare D1 persistence for stream metadata
 - Safety-oriented design with physician verification requirements
 
 ---
 
-## Empirical benchmark summary
+## Evidence and benchmark status
 
-Evaluated across 15.5 hours of consented, de-identified clinical encounter snippets (N = 480), gathered from field workers and outpatient consultations in Kenya, Ethiopia, and Nigeria under clinical supervision.
+The repository separates fixture demonstrations from measured validation:
 
-| Speech Model | Swahili-English WER (%) | Amharic-English WER (%) | Yoruba-English WER (%) | ICD-10 F1 Score (↑) | End-to-End Latency |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Whisper Large-v3** | 28.4% | 38.6% | 32.1% | 0.68 | 2,840 ms |
-| **SeamlessM4T v2** | 24.1% | 34.2% | 29.5% | 0.74 | 2,150 ms |
-| **Sahara Speech API v2** | **11.2%** | **14.8%** | **12.6%** | **0.94** | **420 ms** |
-
-- **Edge latency highlight:** Nairobi node TTFB = **62 ms**, representing an 80% reduction versus standard monolith cloud VM deployments.
-- **Lighthouse scores:** Performance 98, Accessibility 100, Best Practices 100, SEO 100.
+- The Module 4 fixture matrix uses embedded hypotheses and is not an audio benchmark or production model ranking.
+- The live benchmark accepts one reviewed Amharic-English sample and reports Intron Sahara v2.5 latency, transcript, WER, and CER.
+- WER/CER require a verified reference transcript. A provisional Intron-reference mode is available for model-to-model comparison, but it is not independent gold-standard accuracy.
+- The clinical validation report covers 15 reviewed simulated cases and reports a 56.38% mean WER, 44.33% target-term recall, and six cases with critical-term misses. These results require clinician review and do not support autonomous care.
 
 ---
 
@@ -80,7 +79,8 @@ Typical flow:
 2. The frontend sends the request to the API gateway.
 3. The backend authenticates to the Intron API using `INTRON_API_KEY`.
 4. The system returns transcript, clinical analysis, and optional structured outputs.
-5. The review workflow allows a clinician to validate content before any export or EHR commit.
+5. Module 2 exposes an editable SOAP draft and requires clinician sign-off before FHIR export or EHR commit.
+6. Module 4 can send a reviewed sample to `/api/v1/benchmark/live` for Intron-focused scoring.
 
 ---
 
@@ -106,7 +106,8 @@ Typical flow:
 ├── requirements.txt         # Python dependencies
 ├── .env.example             # Example environment configuration
 ├── config.py                # Configuration helpers
-├── benchmark_suite.py       # Benchmarking and model comparison utilities
+├── benchmark_suite.py       # Fixture benchmark and model comparison utilities
+├── edge_persistence.py      # SQLite/D1 stream metadata persistence adapter
 ├── clinical_validation_*    # Validation and reporting scripts
 ├── tests/                   # Safety and validation tests
 ├── README.md                # Project documentation
@@ -155,7 +156,18 @@ ALLOWED_ORIGINS=https://your-project.pages.dev
 REQUIRE_PROXY_AUTH=false
 EHR_FHIR_ENDPOINT=
 EHR_API_KEY=
+EDGE_SQLITE_PATH=edge_sync.sqlite3
+CLOUDFLARE_D1_API_URL=
+CLOUDFLARE_D1_API_TOKEN=
+OPENAI_API_KEY=
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+GEMINI_API_KEY=
+GEMINI_TRANSCRIBE_MODEL=gemini-2.0-flash
 ```
+
+OpenAI and Gemini are optional future comparison providers. The current live
+benchmark UI focuses on Intron Sahara v2.5. Keep all provider keys on the
+backend; never add them to `index.html`.
 
 ### 3. Install Python dependencies
 
@@ -216,7 +228,20 @@ For full deployment guidance, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Validation and benchmarking
 
-The repo includes benchmarking and evaluation scripts for speech quality, clinical coding, and validation workflows. These assets are useful for internal evaluation and model comparison, but they should be treated as supporting evidence rather than standalone clinical validation.
+Run the focused regression suite with:
+
+```bash
+python -m unittest tests.test_safety tests.test_edge_persistence -v
+python -m py_compile main.py edge_persistence.py
+```
+
+The live benchmark supports two reference modes:
+
+1. `verified`: paste an approved reference transcript to calculate independent WER/CER.
+2. `intron`: use the Intron transcript as a provisional reference for comparing another configured provider.
+
+Both modes are evaluation aids, not standalone clinical validation. Use
+simulated or de-identified recordings and require clinician review.
 
 ---
 

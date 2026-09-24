@@ -2621,8 +2621,15 @@
       setLiveBenchmarkStatus('Running Intron Sahara v2.5...', 'text-[10px] font-mono text-emerald-300');
       try {
         const response = await fetch(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || `Benchmark failed (${response.status})`);
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = typeof result.detail === 'string'
+            ? result.detail
+            : result.detail
+              ? JSON.stringify(result.detail)
+              : `Benchmark failed (${response.status})`;
+          throw new Error(detail);
+        }
         const body = document.getElementById('live-benchmark-results-body');
         const panel = document.getElementById('live-benchmark-results');
         if (body) {
@@ -2634,7 +2641,8 @@
         if (panel) panel.classList.remove('hidden');
         setLiveBenchmarkStatus('Benchmark complete', 'text-[10px] font-mono text-emerald-300');
       } catch (error) {
-        setLiveBenchmarkStatus(`Benchmark failed: ${error.message}`, 'text-[10px] font-mono text-red-300');
+        const message = error?.message || String(error);
+        setLiveBenchmarkStatus(`Benchmark failed: ${message}`, 'text-[10px] font-mono text-red-300');
       }
     }
 

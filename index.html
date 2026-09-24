@@ -896,7 +896,7 @@
   }
 
   function scheduleWebSocketReconnect() {
-    if (websocketReconnectTimer || !isRecordingTriage) return;
+    if (websocketReconnectTimer || (!isRecordingTriage && !ehrRecording)) return;
 
     const jitterFraction = 1 + (Math.random() * 0.4 - 0.2);
     const delay = Math.min(3000, Math.max(100, websocketRetryDelayMs * jitterFraction));
@@ -937,7 +937,7 @@
           websocket.send(JSON.stringify({ type: 'resume', ack_ts: lastAckTs }));
         }
         const status = document.getElementById('mic-status');
-        if (status && isRecordingTriage) {
+        if (status && (isRecordingTriage || ehrRecording)) {
           status.dataset.baseStatus = 'Connected. Listening to code-switched audio stream...';
           status.innerText = status.dataset.baseStatus;
         }
@@ -957,6 +957,12 @@
             }
           }
           if (payload && payload.transcript) {
+            if (ehrRecording) {
+              ehrLiveTranscript = payload.transcript;
+              onStreamUpdate(payload);
+              extractEHRFields(ehrLiveTranscript);
+              ehrSetStatus('Live Intron Amharic-English transcript received.');
+            }
             const now = performance.now();
             if (firstAudioFrameSentAt !== null && !Number.isFinite(faasMs)) {
               faasMs = now - firstAudioFrameSentAt;
@@ -989,7 +995,7 @@
       websocket.onclose = () => {
         console.log('WebSocket closed');
         const status = document.getElementById('mic-status');
-        if (status && isRecordingTriage) {
+        if (status && (isRecordingTriage || ehrRecording)) {
           status.dataset.baseStatus = 'Speech service disconnected. Reconnecting with resilient packet replay...';
           status.innerText = status.dataset.baseStatus;
         }
@@ -2087,6 +2093,11 @@
     async function toggleEHRRecording() {
       if (ehrRecording) {
         ehrRecording = false;
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+          websocket.send(JSON.stringify({ event: 'stop' }));
+          websocket.close();
+        }
+        stopAudioStreaming();
         if (ehrRecognition) { try { ehrRecognition.stop(); } catch (e) {} }
         if (ehrMediaRecorder && ehrMediaRecorder.state === 'recording') ehrMediaRecorder.stop();
         setEHRRecordButtonState(false);
@@ -2098,6 +2109,21 @@
       updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
       const box = document.getElementById('ehr-transcript-box');
       if (box) box.innerHTML = "";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        ehrRecording = true;
+        setEHRRecordButtonState(true);
+        ehrSetStatus('Connecting to Intron Amharic-English streaming ASR...');
+        await initWebSocket();
+        await startAudioStreaming(websocket, stream);
+        ehrSetStatus('Streaming directly to Intron Amharic-English ASR.');
+        return;
+      } catch (err) {
+        ehrRecording = false;
+        stopAudioStreaming();
+        setEHRRecordButtonState(false);
+        ehrSetStatus(`Intron streaming unavailable (${err.message}); using upload fallback.`);
+      }
       const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognitionImpl) {
         try {

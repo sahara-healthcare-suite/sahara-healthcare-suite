@@ -683,8 +683,21 @@
               </div>
             </div>
             <div>
-              <label for="live-benchmark-reference" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Verified reference transcript</label>
+              <label for="live-benchmark-reference" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Verified reference transcript (optional)</label>
               <textarea id="live-benchmark-reference" rows="4" class="mt-1 w-full resize-y bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Paste the approved Amharic-English reference transcript..."></textarea>
+              <div class="flex flex-wrap items-center gap-3 mt-2 text-[11px]">
+                <label class="text-slate-500">Reference mode</label>
+                <select id="live-benchmark-reference-mode" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200">
+                  <option value="verified">Verified transcript</option>
+                  <option value="intron">Intron output (provisional reference)</option>
+                </select>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-slate-400">
+                <span>Models:</span>
+                <label><input id="benchmark-provider-intron" type="checkbox" checked class="mr-1 accent-emerald-500"> Intron</label>
+                <label><input id="benchmark-provider-openai" type="checkbox" class="mr-1 accent-emerald-500"> OpenAI</label>
+                <label><input id="benchmark-provider-gemini" type="checkbox" class="mr-1 accent-emerald-500"> Gemini</label>
+              </div>
             </div>
           </div>
           <button onclick="runLiveProviderBenchmark()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2">
@@ -2594,15 +2607,17 @@
         alert('Upload or record a sample audio file first.');
         return;
       }
-      if (!reference) {
-        alert('A verified reference transcript is required for WER and CER scoring.');
-        return;
-      }
       const form = new FormData();
       form.append('file', audio, audio.name || 'benchmark-sample.webm');
       form.append('reference_transcript', reference);
       form.append('language_code', 'am-ET');
-      form.append('providers', 'intron');
+      const selectedProviders = ['intron', 'openai', 'gemini'].filter((provider) => document.getElementById(`benchmark-provider-${provider}`)?.checked);
+      if (!selectedProviders.length) {
+        alert('Select at least one benchmark model.');
+        return;
+      }
+      form.append('providers', selectedProviders.join(','));
+      form.append('reference_mode', document.getElementById('live-benchmark-reference-mode')?.value || 'verified');
       setLiveBenchmarkStatus('Running Intron Sahara v2.5...', 'text-[10px] font-mono text-emerald-300');
       try {
         const response = await fetch(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
@@ -2613,7 +2628,7 @@
         if (body) {
           body.innerHTML = result.results.map((item) => {
             const complete = item.status === 'complete';
-            return `<tr><td class="py-2 text-slate-200">${escapeHtmlFollowup(item.model)}</td><td class="py-2 ${complete ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtmlFollowup(item.status)}</td><td class="py-2">${item.latency_ms} ms</td><td class="py-2">${complete ? `${(item.WER * 100).toFixed(2)}%` : '--'}</td><td class="py-2">${complete ? `${(item.CER * 100).toFixed(2)}%` : '--'}</td><td class="py-2 max-w-sm whitespace-normal text-slate-400">${complete ? escapeHtmlFollowup(item.transcript) : escapeHtmlFollowup(item.error || 'Provider unavailable')}</td></tr>`;
+            return `<tr><td class="py-2 text-slate-200">${escapeHtmlFollowup(item.model)}</td><td class="py-2 ${complete ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtmlFollowup(item.status)}</td><td class="py-2">${item.latency_ms} ms</td><td class="py-2">${complete && item.WER !== undefined ? `${(item.WER * 100).toFixed(2)}%` : '--'}</td><td class="py-2">${complete && item.CER !== undefined ? `${(item.CER * 100).toFixed(2)}%` : '--'}</td><td class="py-2 max-w-sm whitespace-normal text-slate-400">${complete ? escapeHtmlFollowup(item.transcript) : escapeHtmlFollowup(item.error || 'Provider unavailable')}</td></tr>`;
           }).join('');
         }
         if (panel) panel.classList.remove('hidden');

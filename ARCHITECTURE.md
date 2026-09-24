@@ -107,7 +107,10 @@ audio sample and verified Amharic-English reference transcript can be sent to
 `/api/v1/benchmark/live`, which benchmarks Intron Sahara v2.5 by default and
 can later compare OpenAI and Gemini when explicitly selected. It returns
 provider status, latency, WER, and CER. Missing provider keys are reported as
-unavailable; no scores are fabricated.
+unavailable; no scores are fabricated. If the UI selects the Intron output as
+the reference, the response is marked `provisional_intron_reference`; that
+mode is useful for model-to-model error comparison but is not independent
+gold-standard accuracy.
 
 The separate clinical validation audit form is intentionally not exposed in
 the public application navigation. The product demo focuses on the three care

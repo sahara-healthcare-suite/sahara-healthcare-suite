@@ -1797,15 +1797,18 @@ async def _run_live_benchmark_provider(name: str, provider, *args) -> dict:
 @app.post("/api/v1/benchmark/live")
 async def live_benchmark(
     file: UploadFile = File(...),
-    reference_transcript: str = Form(...),
+    reference_transcript: str = Form(""),
     language_code: str = Form("am-ET"),
     providers: str = Form("intron"),
+    reference_mode: str = Form("verified"),
 ):
     """Benchmark selected providers; Intron is the default active focus."""
     contents = await _read_limited_upload(file)
-    if not reference_transcript.strip():
-        raise HTTPException(status_code=400, detail="Reference transcript is required")
+    if reference_mode not in {"verified", "intron"}:
+        raise HTTPException(status_code=400, detail="reference_mode must be verified or intron")
     requested = {provider.strip().lower() for provider in providers.split(",") if provider.strip()}
+    if reference_mode == "intron":
+        requested.add("intron")
     provider_tasks = []
     if "intron" in requested:
         provider_tasks.append(_run_live_benchmark_provider(
@@ -1822,13 +1825,21 @@ async def live_benchmark(
     if not provider_tasks:
         raise HTTPException(status_code=400, detail="Select at least one supported benchmark provider")
     results = await asyncio.gather(*provider_tasks)
+    intron_reference = next(
+        (result["transcript"] for result in results if result["model"] == "Intron Sahara v2.5" and result["transcript"]),
+        "",
+    )
+    scoring_reference = reference_transcript.strip() or (intron_reference if reference_mode == "intron" else "")
     for result in results:
-        result.update(_benchmark_scores(reference_transcript, result["transcript"]) if result["transcript"] else {})
+        if scoring_reference and result["transcript"]:
+            result.update(_benchmark_scores(scoring_reference, result["transcript"]))
     return {
         "status": "success",
         "benchmark_type": "live_provider_comparison",
         "language_code": language_code,
-        "reference_transcript": reference_transcript,
+        "reference_transcript": scoring_reference,
+        "reference_source": "verified_transcript" if reference_transcript.strip() else "intron_provisional" if intron_reference else "none",
+        "scoring_status": "scored" if reference_transcript.strip() else "provisional_intron_reference" if intron_reference and reference_mode == "intron" else "transcript_only",
         "providers": sorted(requested),
         "results": results,
         "interpretation": "Measured sample comparison only; not a clinical performance claim.",

@@ -104,9 +104,10 @@ this layer. The schema is created automatically at service startup.
 
 Module 4 keeps the fixture matrix separate from live measurements. A reviewed
 audio sample and verified Amharic-English reference transcript can be sent to
-`/api/v1/benchmark/live`, which compares configured Intron, OpenAI, and Gemini
-transcription providers and returns provider status, latency, WER, and CER.
-Missing provider keys are reported as unavailable; no scores are fabricated.
+`/api/v1/benchmark/live`, which benchmarks Intron Sahara v2.5 by default and
+can later compare OpenAI and Gemini when explicitly selected. It returns
+provider status, latency, WER, and CER. Missing provider keys are reported as
+unavailable; no scores are fabricated.
 
 The separate clinical validation audit form is intentionally not exposed in
 the public application navigation. The product demo focuses on the three care

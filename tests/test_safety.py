@@ -113,11 +113,13 @@ class SafetyTests(unittest.TestCase):
                 upload,
                 "Patient has fever and cough.",
                 "am-ET",
+                "intron",
             )
         )
         self.assertEqual(result["benchmark_type"], "live_provider_comparison")
-        self.assertEqual(len(result["results"]), 3)
-        self.assertTrue(all(item["status"] == "unavailable" for item in result["results"]))
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["model"], "Intron Sahara v2.5")
+        self.assertEqual(result["results"][0]["status"], "unavailable")
 
     def test_ehr_commit_fails_closed_without_endpoint(self):
         payload = main.EHRCommitRequest(

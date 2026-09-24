@@ -666,8 +666,8 @@
         <div class="mt-6 bg-slate-950 p-5 rounded-xl border border-emerald-500/20 space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
-              <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-microphone-lines text-emerald-400 mr-2"></i>Live Provider Benchmark</h3>
-              <p class="text-[11px] text-slate-500 mt-1">Upload or record one reviewed Amharic-English sample, then compare configured providers. Missing API keys are reported as unavailable.</p>
+              <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-microphone-lines text-emerald-400 mr-2"></i>Live Intron Sahara v2.5 Benchmark</h3>
+              <p class="text-[11px] text-slate-500 mt-1">Upload or record one reviewed Amharic-English sample and measure the configured Intron provider. OpenAI and Gemini can be added later.</p>
             </div>
             <span id="live-benchmark-status" class="text-[10px] font-mono text-slate-500">Ready</span>
           </div>
@@ -2602,7 +2602,8 @@
       form.append('file', audio, audio.name || 'benchmark-sample.webm');
       form.append('reference_transcript', reference);
       form.append('language_code', 'am-ET');
-      setLiveBenchmarkStatus('Running Intron, OpenAI, and Gemini...', 'text-[10px] font-mono text-emerald-300');
+      form.append('providers', 'intron');
+      setLiveBenchmarkStatus('Running Intron Sahara v2.5...', 'text-[10px] font-mono text-emerald-300');
       try {
         const response = await fetch(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
         const result = await response.json();

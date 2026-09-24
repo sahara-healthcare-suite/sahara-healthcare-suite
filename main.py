@@ -1799,30 +1799,38 @@ async def live_benchmark(
     file: UploadFile = File(...),
     reference_transcript: str = Form(...),
     language_code: str = Form("am-ET"),
+    providers: str = Form("intron"),
 ):
-    """Compare configured ASR providers on one reviewed Amharic-English sample."""
+    """Benchmark selected providers; Intron is the default active focus."""
     contents = await _read_limited_upload(file)
     if not reference_transcript.strip():
         raise HTTPException(status_code=400, detail="Reference transcript is required")
-    providers = await asyncio.gather(
-        _run_live_benchmark_provider(
+    requested = {provider.strip().lower() for provider in providers.split(",") if provider.strip()}
+    provider_tasks = []
+    if "intron" in requested:
+        provider_tasks.append(_run_live_benchmark_provider(
             "Intron Sahara v2.5", _benchmark_intron, contents, file.filename or "sample.wav", file.content_type or "audio/wav", language_code
-        ),
-        _run_live_benchmark_provider(
+        ))
+    if "openai" in requested:
+        provider_tasks.append(_run_live_benchmark_provider(
             f"OpenAI {OPENAI_TRANSCRIBE_MODEL}", _benchmark_openai, contents, file.filename or "sample.wav", file.content_type or "audio/wav"
-        ),
-        _run_live_benchmark_provider(
+        ))
+    if "gemini" in requested:
+        provider_tasks.append(_run_live_benchmark_provider(
             f"Google Gemini {GEMINI_TRANSCRIBE_MODEL}", _benchmark_gemini, contents, file.content_type or "audio/wav"
-        ),
-    )
-    for result in providers:
+        ))
+    if not provider_tasks:
+        raise HTTPException(status_code=400, detail="Select at least one supported benchmark provider")
+    results = await asyncio.gather(*provider_tasks)
+    for result in results:
         result.update(_benchmark_scores(reference_transcript, result["transcript"]) if result["transcript"] else {})
     return {
         "status": "success",
         "benchmark_type": "live_provider_comparison",
         "language_code": language_code,
         "reference_transcript": reference_transcript,
-        "results": providers,
+        "providers": sorted(requested),
+        "results": results,
         "interpretation": "Measured sample comparison only; not a clinical performance claim.",
     }
 

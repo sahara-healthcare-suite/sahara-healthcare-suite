@@ -100,6 +100,14 @@ transcripts are stored as metadata in Cloudflare D1 when
 development falls back to `EDGE_SQLITE_PATH`. Raw audio is never stored by
 this layer. The schema is created automatically at service startup.
 
+### Live benchmark comparison
+
+Module 4 keeps the fixture matrix separate from live measurements. A reviewed
+audio sample and verified Amharic-English reference transcript can be sent to
+`/api/v1/benchmark/live`, which compares configured Intron, OpenAI, and Gemini
+transcription providers and returns provider status, latency, WER, and CER.
+Missing provider keys are reported as unavailable; no scores are fabricated.
+
 The separate clinical validation audit form is intentionally not exposed in
 the public application navigation. The product demo focuses on the three care
 modules and benchmark matrix; review protocols remain available for controlled

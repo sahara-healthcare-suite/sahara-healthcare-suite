@@ -888,7 +888,7 @@ import logging
 import re
 from collections import deque
 from typing import List, Optional, Tuple
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -999,6 +999,10 @@ INTRON_API_KEY = os.getenv("INTRON_API_KEY") or ""
 INTRON_ENDPOINT = os.getenv("INTRON_ENDPOINT", "https://api.intron.io/v1/transcribe")
 EHR_FHIR_ENDPOINT = os.getenv("EHR_FHIR_ENDPOINT") or ""
 EHR_API_KEY = os.getenv("EHR_API_KEY") or ""
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or ""
+OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or ""
+GEMINI_TRANSCRIBE_MODEL = os.getenv("GEMINI_TRANSCRIBE_MODEL", "gemini-2.0-flash")
 
 
 async def _read_limited_upload(upload: UploadFile) -> bytes:
@@ -1673,6 +1677,155 @@ async def healthz():
 @app.get("/readyz")
 async def readyz():
     return {"status": "ready"}
+
+
+def _benchmark_tokens(value: str) -> list[str]:
+    return re.findall(r"[\w\u1200-\u137f]+", (value or "").lower(), re.UNICODE)
+
+
+def _benchmark_edit_distance(expected: list[str], actual: list[str]) -> int:
+    previous = list(range(len(actual) + 1))
+    for row, expected_token in enumerate(expected, start=1):
+        current = [row]
+        for column, actual_token in enumerate(actual, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[column] + 1,
+                    previous[column - 1] + (expected_token != actual_token),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
+def _benchmark_scores(reference: str, hypothesis: str) -> dict:
+    reference_tokens = _benchmark_tokens(reference)
+    hypothesis_tokens = _benchmark_tokens(hypothesis)
+    reference_chars = list("".join(reference_tokens))
+    hypothesis_chars = list("".join(hypothesis_tokens))
+    return {
+        "WER": round(_benchmark_edit_distance(reference_tokens, hypothesis_tokens) / max(1, len(reference_tokens)), 4),
+        "CER": round(_benchmark_edit_distance(reference_chars, hypothesis_chars) / max(1, len(reference_chars)), 4),
+    }
+
+
+async def _post_intron_sync_upload(contents: bytes, filename: str, content_type: str, language_code: str) -> dict:
+    response_data = {
+        "audio_file_name": filename or "recording.wav",
+        "use_language_asr_input": (language_code or "am").split("-")[0].lower(),
+        "use_category": "file_category_telehealth",
+        "use_disable_llm_corrections": "FALSE",
+    }
+    files = {"audio_file_blob": (filename or "recording.wav", contents, content_type or "audio/wav")}
+    async with httpx.AsyncClient(timeout=130.0) as client:
+        response = await client.post(
+            INTRON_SYNC_UPLOAD_ENDPOINT,
+            headers={"Authorization": f"Bearer {INTRON_API_KEY}"},
+            data=response_data,
+            files=files,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+async def _benchmark_intron(contents: bytes, filename: str, content_type: str, language_code: str) -> str:
+    if not INTRON_API_KEY:
+        raise RuntimeError("INTRON_API_KEY is not configured")
+    response = await _post_intron_sync_upload(contents, filename, content_type, language_code)
+    data = response.get("data", {}) if isinstance(response, dict) else {}
+    return str(data.get("audio_transcript") or data.get("transcript") or "")
+
+
+async def _benchmark_openai(contents: bytes, filename: str, content_type: str) -> str:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+    async with httpx.AsyncClient(timeout=130.0) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            data={"model": OPENAI_TRANSCRIBE_MODEL, "language": "am"},
+            files={"file": (filename, contents, content_type or "audio/wav")},
+        )
+        response.raise_for_status()
+        return str(response.json().get("text", ""))
+
+
+async def _benchmark_gemini(contents: bytes, content_type: str) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+    import base64 as _base64
+
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TRANSCRIBE_MODEL}:generateContent"
+        f"?key={GEMINI_API_KEY}"
+    )
+    body = {
+        "contents": [{"parts": [
+            {"text": "Transcribe this clinical Amharic-English code-switched audio verbatim. Return only the transcript."},
+            {"inline_data": {"mime_type": content_type or "audio/wav", "data": _base64.b64encode(contents).decode("ascii")}},
+        ]}]
+    }
+    async with httpx.AsyncClient(timeout=130.0) as client:
+        response = await client.post(endpoint, json=body)
+        response.raise_for_status()
+        candidates = response.json().get("candidates", [])
+        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+        return " ".join(str(part.get("text", "")) for part in parts).strip()
+
+
+async def _run_live_benchmark_provider(name: str, provider, *args) -> dict:
+    started = time.perf_counter()
+    try:
+        transcript = await provider(*args)
+        return {
+            "model": name,
+            "status": "complete",
+            "transcript": transcript,
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        }
+    except Exception as exc:
+        return {
+            "model": name,
+            "status": "unavailable",
+            "transcript": "",
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+            "error": str(exc),
+        }
+
+
+@app.post("/api/v1/benchmark/live")
+async def live_benchmark(
+    file: UploadFile = File(...),
+    reference_transcript: str = Form(...),
+    language_code: str = Form("am-ET"),
+):
+    """Compare configured ASR providers on one reviewed Amharic-English sample."""
+    contents = await _read_limited_upload(file)
+    if not reference_transcript.strip():
+        raise HTTPException(status_code=400, detail="Reference transcript is required")
+    providers = await asyncio.gather(
+        _run_live_benchmark_provider(
+            "Intron Sahara v2.5", _benchmark_intron, contents, file.filename or "sample.wav", file.content_type or "audio/wav", language_code
+        ),
+        _run_live_benchmark_provider(
+            f"OpenAI {OPENAI_TRANSCRIBE_MODEL}", _benchmark_openai, contents, file.filename or "sample.wav", file.content_type or "audio/wav"
+        ),
+        _run_live_benchmark_provider(
+            f"Google Gemini {GEMINI_TRANSCRIBE_MODEL}", _benchmark_gemini, contents, file.content_type or "audio/wav"
+        ),
+    )
+    for result in providers:
+        result.update(_benchmark_scores(reference_transcript, result["transcript"]) if result["transcript"] else {})
+    return {
+        "status": "success",
+        "benchmark_type": "live_provider_comparison",
+        "language_code": language_code,
+        "reference_transcript": reference_transcript,
+        "results": providers,
+        "interpretation": "Measured sample comparison only; not a clinical performance claim.",
+    }
+
 
 @app.post("/api/v1/transcribe")
 async def transcribe_audio(

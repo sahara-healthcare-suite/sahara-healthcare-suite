@@ -898,6 +898,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import base64
 import websockets
+from edge_persistence import persistence
 # Initialize logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("afrihealth_gateway")
@@ -969,6 +970,11 @@ class ProxyIdentityMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ProxyIdentityMiddleware)
+
+
+@app.on_event("startup")
+async def initialize_edge_persistence():
+    await persistence.initialize()
 
 # CORS configuration - strict allowlist only
 ALLOWED_ORIGINS = [
@@ -1103,6 +1109,14 @@ class ClinicalProcessResponse(BaseModel):
     sign_off_required: bool = True
 
 
+class SOAPDraftPayload(BaseModel):
+    transcript: str = ""
+    subjective: str = ""
+    objective: str = ""
+    assessment: str = ""
+    plan: str = ""
+
+
 class FHIRExportRequest(BaseModel):
     patient_id: str = Field(..., min_length=1, max_length=128)
     encounter_id: str = Field(..., min_length=1, max_length=128)
@@ -1115,6 +1129,7 @@ class FHIRExportRequest(BaseModel):
     diagnosis_code: Optional[str] = Field(default=None, max_length=32)
     diagnosis_display: Optional[str] = Field(default=None, max_length=256)
     medications: List[str] = Field(default_factory=list, max_length=20)
+    soap: Optional[SOAPDraftPayload] = None
 
 
 class EHRCommitRequest(FHIRExportRequest):
@@ -1329,6 +1344,31 @@ def _build_fhir_bundle(payload: FHIRExportRequest) -> dict:
             }
         },
     ]
+
+    if payload.soap:
+        entries.append(
+            {
+                "resource": {
+                    "resourceType": "Composition",
+                    "status": "final",
+                    "type": {"text": "Structured SOAP clinical note"},
+                    "subject": {"reference": f"Patient/{payload.patient_id}"},
+                    "encounter": {"reference": f"Encounter/{payload.encounter_id}"},
+                    "section": [
+                        {"title": "Subjective", "text": {"status": "generated", "div": payload.soap.subjective}},
+                        {"title": "Objective", "text": {"status": "generated", "div": payload.soap.objective}},
+                        {"title": "Assessment", "text": {"status": "generated", "div": payload.soap.assessment}},
+                        {"title": "Plan", "text": {"status": "generated", "div": payload.soap.plan}},
+                    ],
+                    "extension": [
+                        {
+                            "url": "https://sahara-healthcare-suite.example/fhir/transcript",
+                            "valueString": payload.soap.transcript,
+                        }
+                    ],
+                }
+            }
+        )
 
     vital_components = []
     if payload.blood_pressure:
@@ -1721,6 +1761,7 @@ async def websocket_stream(websocket: WebSocket):
     await websocket.accept()
 
     language = websocket.query_params.get("use_language_asr_input", "am")
+    clinic_id = websocket.query_params.get("clinic_id", "default-clinic")
     if not re.fullmatch(r"[a-z]{2,8}(?:-[A-Z]{2})?", language):
         await websocket.close(code=1008)
         _active_websockets -= 1
@@ -1729,6 +1770,25 @@ async def websocket_stream(websocket: WebSocket):
     intron_url = f"{INTRON_STREAM_ENDPOINT}?sample_rate=16000&bit_rate=16&num_channels=1&use_language_asr_input={language}"
 
     try:
+        session_id = await persistence.start_session(
+            clinic_id=clinic_id,
+            language_code=language,
+        )
+        await websocket.send_json({"session_id": session_id, "persistence": persistence.backend})
+        persistence_tasks: set[asyncio.Task] = set()
+
+        def queue_persistence(transcript: str, event_type: str) -> None:
+            task = asyncio.create_task(
+                persistence.record_transcript(
+                    session_id=session_id,
+                    clinic_id=clinic_id,
+                    transcript=transcript,
+                    event_type=event_type,
+                )
+            )
+            persistence_tasks.add(task)
+            task.add_done_callback(persistence_tasks.discard)
+
         async with websockets.connect(
             intron_url,
             extra_headers={"Authorization": f"Bearer {INTRON_API_KEY}"}
@@ -1763,9 +1823,13 @@ async def websocket_stream(websocket: WebSocket):
                     payload = json.loads(message)
                     msg_type = payload.get("message_type")
                     if msg_type == "PARTIAL_TRANSCRIPT":
-                        await websocket.send_json({"transcript": payload.get("transcript", "")})
+                        transcript = payload.get("transcript", "")
+                        queue_persistence(transcript, "partial")
+                        await websocket.send_json({"transcript": transcript, "session_id": session_id})
                     elif msg_type == "COMMITTED_TRANSCRIPT":
-                        await websocket.send_json({"transcript": payload.get("transcript_text", "")})
+                        transcript = payload.get("transcript_text", "")
+                        queue_persistence(transcript, "final")
+                        await websocket.send_json({"transcript": transcript, "session_id": session_id})
                     elif msg_type in ("ERROR", "INPUT_ERROR", "AUTHENTICATION_ERROR", "QUOTA_EXCEEDED"):
                         await websocket.send_json({"error": payload.get("message", msg_type)})
 
@@ -1784,6 +1848,8 @@ async def websocket_stream(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        if "persistence_tasks" in locals() and persistence_tasks:
+            await asyncio.gather(*persistence_tasks, return_exceptions=True)
         _active_websockets = max(0, _active_websockets - 1)
         try:
             await websocket.close()

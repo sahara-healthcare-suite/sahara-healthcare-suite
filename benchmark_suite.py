@@ -77,11 +77,11 @@ BENCHMARK_SAMPLES = [
     {
         "id": "sample_002",
         "audio_path": "./samples/sample_002.wav",
-        "reference": "dhaabbata fayyaa. chief complaint is chest pain with short breath. clinical assessment shows blood pressure 140 over 90.",
-        "language_pair": "English-Afaan Oromoo Code-Switch",
+        "reference": "የጤና ተቋም። chief complaint is chest pain with short breath. clinical assessment shows blood pressure 140 over 90.",
+        "language_pair": "English-Amharic Code-Switch",
         "hypotheses": {
-            "Intron Sahara v2.5": "dhaabbata fayyaa. chief complaint is chest pain with short breath. clinical assessment shows blood pressure 140 over 90.",
-            "OpenAI Whisper (Medium)": "dhabata faya chief complaint chest pain short breath blood pressure 140 over 90",
+            "Intron Sahara v2.5": "የጤና ተቋም። chief complaint is chest pain with short breath. clinical assessment shows blood pressure 140 over 90.",
+            "OpenAI Whisper (Medium)": "የጤና ተቋም chief complaint chest pain short breath blood pressure 140 over 90",
             "Meta Wav2Vec2 (XLS-R)": "chief complaint chest pain short breath blood pressure 140 90"
         }
     },

@@ -84,6 +84,28 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(resources[1]["subject"]["reference"], "Patient/patient-1")
         self.assertEqual(resources[-1]["code"]["coding"][0]["code"], "R07.9")
 
+    def test_fhir_export_contains_signed_soap_composition(self):
+        payload = main.FHIRExportRequest(
+            patient_id="patient-1",
+            encounter_id="encounter-1",
+            chief_complaint="Chest pain",
+            soap=main.SOAPDraftPayload(
+                transcript="Chest pain for two days.",
+                subjective="Chest pain for two days.",
+                objective="BP 140/90.",
+                assessment="R07.9 - Chest pain, unspecified.",
+                plan="Clinician review and follow-up.",
+            ),
+        )
+        bundle = asyncio.run(main.export_fhir(payload))
+        compositions = [
+            entry["resource"]
+            for entry in bundle["entry"]
+            if entry["resource"]["resourceType"] == "Composition"
+        ]
+        self.assertEqual(len(compositions), 1)
+        self.assertEqual(compositions[0]["section"][0]["text"]["div"], "Chest pain for two days.")
+
     def test_ehr_commit_fails_closed_without_endpoint(self):
         payload = main.EHRCommitRequest(
             patient_id="patient-1",

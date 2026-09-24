@@ -2093,9 +2093,9 @@
     async function toggleEHRRecording() {
       if (ehrRecording) {
         ehrRecording = false;
+        isRecordingTriage = false;
         if (websocket && websocket.readyState === WebSocket.OPEN) {
           websocket.send(JSON.stringify({ event: 'stop' }));
-          websocket.close();
         }
         stopAudioStreaming();
         if (ehrRecognition) { try { ehrRecognition.stop(); } catch (e) {} }
@@ -2110,8 +2110,11 @@
       const box = document.getElementById('ehr-transcript-box');
       if (box) box.innerHTML = "";
       try {
+        pendingAudioFrames.clear();
+        lastAckTs = 0;
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         ehrRecording = true;
+        isRecordingTriage = true;
         setEHRRecordButtonState(true);
         ehrSetStatus('Connecting to Intron Amharic-English streaming ASR...');
         await initWebSocket();
@@ -2120,45 +2123,10 @@
         return;
       } catch (err) {
         ehrRecording = false;
+        isRecordingTriage = false;
         stopAudioStreaming();
         setEHRRecordButtonState(false);
         ehrSetStatus(`Intron streaming unavailable (${err.message}); using upload fallback.`);
-      }
-      const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognitionImpl) {
-        try {
-          ehrRecognition = new SpeechRecognitionImpl();
-          ehrRecognition.continuous = true;
-          ehrRecognition.interimResults = true;
-          ehrRecognition.lang = 'en-US';
-          ehrRecognition.onresult = (event) => {
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              const chunk = event.results[i][0].transcript;
-              if (event.results[i].isFinal) {
-                ehrLiveTranscript += chunk + ' ';
-                appendEHRTranscriptLine(chunk.trim());
-                extractEHRFields(ehrLiveTranscript);
-              } else {
-                interim = chunk;
-              }
-            }
-            ehrSetStatus(interim ? `Listening: "${interim}"` : 'Listening...');
-          };
-          ehrRecognition.onerror = (e) => {
-            ehrSetStatus(`Speech recognition error: ${e.error}`);
-          };
-          ehrRecognition.onend = () => {
-            if (ehrRecording) { try { ehrRecognition.start(); } catch (e) {} }
-          };
-          ehrRecognition.start();
-          ehrRecording = true;
-          setEHRRecordButtonState(true);
-          ehrSetStatus('Listening... speak the consultation naturally.');
-          return;
-        } catch (err) {
-          ehrSetStatus(`On-device recognition unavailable (${err.message}); falling back to audio upload.`);
-        }
       }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

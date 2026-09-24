@@ -272,60 +272,6 @@
             </div>
           </div>
         </div>
-        <section class="mt-6 bg-[#10192d] rounded-xl border border-slate-800 p-5" aria-labelledby="soap-panel-title">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <h3 id="soap-panel-title" class="text-sm font-bold text-white">Structured SOAP Encounter &amp; Diagnostic Output</h3>
-              <p class="text-[11px] text-slate-500 mt-1">Editable clinical draft. Streaming updates fill fields that have not been manually changed.</p>
-            </div>
-            <span id="soap-status-badge" class="inline-flex items-center w-fit rounded-md bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">Draft (Pending Verification)</span>
-          </div>
-          <div class="mt-4 space-y-3">
-            <div>
-              <label for="soap-transcript" class="text-[10px] font-bold uppercase tracking-wider text-teal-300">Live Code-Switched Transcript Stream:</label>
-              <textarea id="soap-transcript" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-[#080d19] p-3 text-xs font-mono leading-relaxed text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Live Amharic-English transcript will appear here..."></textarea>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label for="soap-subjective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">S - Subjective (Symptoms):</label>
-                <textarea id="soap-subjective" data-soap-field="subjective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Patient-reported symptoms, complaints, and duration..."></textarea>
-              </div>
-              <div>
-                <label for="soap-objective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">O - Objective (Observations/Vitals):</label>
-                <textarea id="soap-objective" data-soap-field="objective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Vitals and examination observations..."></textarea>
-              </div>
-              <div>
-                <label for="soap-assessment" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">A - Assessment (ICD-10 Code):</label>
-                <textarea id="soap-assessment" data-soap-field="assessment" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Diagnosis, ICD-10 mapping, and confidence..."></textarea>
-              </div>
-              <div>
-                <label for="soap-plan" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">P - Plan &amp; Prescription (Stewardship):</label>
-                <textarea id="soap-plan" data-soap-field="plan" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Medication, dosage, stewardship guidance, and follow-up..."></textarea>
-              </div>
-            </div>
-          </div>
-          <div class="mt-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-slate-800 pt-4">
-            <div class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-              <i class="fa-solid fa-triangle-exclamation mt-0.5 text-amber-300"></i>
-              <span>Human-In-The-Loop Safeguard Required | AI-generated draft. Physician verification is required before FHIR EMR sync.</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <button onclick="previewSoapFhirJson()" class="rounded-lg border border-teal-500/30 bg-slate-900 px-3 py-2 text-[11px] font-bold text-teal-300 transition hover:bg-slate-800 flex items-center gap-2">
-                <i class="fa-solid fa-file-code"></i> Preview FHIR JSON
-              </button>
-              <button id="soap-signoff-button" onclick="verifySoapRecord()" class="rounded-lg bg-amber-400 px-3 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-amber-300 flex items-center gap-2">
-                <i class="fa-solid fa-user-check"></i> Verify &amp; Sign Off Record
-              </button>
-            </div>
-          </div>
-          <div class="hidden mt-4 rounded-lg border border-teal-500/30 bg-[#080d19] p-3" aria-live="polite">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-teal-300">FHIR JSON Preview</span>
-              <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-slate-500 hover:text-white" title="Close FHIR preview"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <pre id="soap-fhir-preview" class="max-h-64 overflow-auto whitespace-pre-wrap text-[10px] text-slate-300"></pre>
-          </div>
-        </section>
       </div>
     </section>
 
@@ -427,6 +373,60 @@
             </div>
           </div>
         </div>
+        <section class="mt-6 bg-[#10192d] rounded-xl border border-slate-800 p-5" aria-labelledby="soap-panel-title">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h3 id="soap-panel-title" class="text-sm font-bold text-white">Structured SOAP Encounter &amp; Diagnostic Output</h3>
+              <p class="text-[11px] text-slate-500 mt-1">Editable clinical draft. Streaming updates fill fields that have not been manually changed.</p>
+            </div>
+            <span id="soap-status-badge" class="inline-flex items-center w-fit rounded-md bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">Draft (Pending Verification)</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            <div>
+              <label for="soap-transcript" class="text-[10px] font-bold uppercase tracking-wider text-teal-300">Live Code-Switched Transcript Stream:</label>
+              <textarea id="soap-transcript" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-[#080d19] p-3 text-xs font-mono leading-relaxed text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Live Amharic-English transcript will appear here..."></textarea>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label for="soap-subjective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">S - Subjective (Symptoms):</label>
+                <textarea id="soap-subjective" data-soap-field="subjective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Patient-reported symptoms, complaints, and duration..."></textarea>
+              </div>
+              <div>
+                <label for="soap-objective" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">O - Objective (Observations/Vitals):</label>
+                <textarea id="soap-objective" data-soap-field="objective" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Vitals and examination observations..."></textarea>
+              </div>
+              <div>
+                <label for="soap-assessment" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">A - Assessment (ICD-10 Code):</label>
+                <textarea id="soap-assessment" data-soap-field="assessment" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Diagnosis, ICD-10 mapping, and confidence..."></textarea>
+              </div>
+              <div>
+                <label for="soap-plan" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">P - Plan &amp; Prescription (Stewardship):</label>
+                <textarea id="soap-plan" data-soap-field="plan" rows="4" class="mt-1 w-full resize-y rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200 focus:border-teal-500 focus:outline-none" placeholder="Medication, dosage, stewardship guidance, and follow-up..."></textarea>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-t border-slate-800 pt-4">
+            <div class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+              <i class="fa-solid fa-triangle-exclamation mt-0.5 text-amber-300"></i>
+              <span>Human-In-The-Loop Safeguard Required | AI-generated draft. Physician verification is required before FHIR EMR sync.</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="previewSoapFhirJson()" class="rounded-lg border border-teal-500/30 bg-slate-900 px-3 py-2 text-[11px] font-bold text-teal-300 transition hover:bg-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-file-code"></i> Preview FHIR JSON
+              </button>
+              <button id="soap-signoff-button" onclick="verifySoapRecord()" class="rounded-lg bg-amber-400 px-3 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-amber-300 flex items-center gap-2">
+                <i class="fa-solid fa-user-check"></i> Verify &amp; Sign Off Record
+              </button>
+            </div>
+          </div>
+          <div class="hidden mt-4 rounded-lg border border-teal-500/30 bg-[#080d19] p-3" aria-live="polite">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-teal-300">FHIR JSON Preview</span>
+              <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-slate-500 hover:text-white" title="Close FHIR preview"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <pre id="soap-fhir-preview" class="max-h-64 overflow-auto whitespace-pre-wrap text-[10px] text-slate-300"></pre>
+          </div>
+        </section>
       </div>
     </section>
 

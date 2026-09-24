@@ -44,10 +44,10 @@ Evaluated across **15.5 hours** of consented, de-identified clinical encounter s
 
 ## 3. Technical Architecture & Tech Stack
 
-* **Frontend:** Streamlit interactive clinical dashboard configured for real-time audio capture, patient ID intake, and code-switching model selection.
-* **Backend:** FastAPI high-performance asynchronous server handling WebSocket streaming (`/ws/transcribe`) and REST API routing (`/api/v1/intake/audio`, `/api/v1/voicebot`, `/api/v1/fhir/export`).
+* **Frontend:** Static browser dashboard configured for real-time audio capture, patient ID intake, and code-switching model selection.
+* **Backend:** FastAPI asynchronous server handling live STT (`/ws/stream`), reviewed audio upload (`/api/intron/stt/upload-sync`), clinical processing, post-care workflows, and server-side FHIR export (`/api/v1/fhir/export`).
 * **Speech Engine Core:** Intron Sahara v2.5 API optimized for low-latency African phonemes and medical nomenclature retention.
-* **Interoperability:** Exports structured, HL7 FHIR-compliant patient documents and ICD-10 diagnostic codes designed for seamless EMR integration (e.g., Helium Health workflows).
+* **Interoperability:** Generates structured HL7 FHIR patient documents and ICD-10 diagnostic codes; outbound EMR submission is enabled only when a FHIR endpoint is configured.
 
 ---
 
@@ -55,10 +55,11 @@ Evaluated across **15.5 hours** of consented, de-identified clinical encounter s
 
 | Endpoint | Method | Description |
 | :--- | :---: | :--- |
-| `/ws/transcribe` | WebSocket | Real-time bi-directional audio chunk streaming and transcription. |
-| `/api/v1/intake/audio` | POST | Multipart audio upload for batch clinical intake and slot-filling. |
-| `/api/v1/voicebot` | POST | Interactive voicebot dialogue handling for symptom triage. |
-| `/api/v1/fhir/export` | GET/POST | Converts parsed clinical entities into HL7 FHIR standard payloads. |
+| `/ws/stream` | WebSocket | Real-time bi-directional audio chunk streaming and transcription. |
+| `/api/intron/stt/upload-sync` | POST | Reviewed multipart audio upload to Intron Sahara. |
+| `/api/v1/post-care/analyze` | POST | Human-confirmed recovery and maternal decision support. |
+| `/api/v1/fhir/export` | POST | Server-side HL7 FHIR Bundle generation. |
+| `/api/v1/ehr/commit` | POST | Optional configured FHIR/EHR submission; returns 503 when unconfigured. |
 
 ---
 
@@ -83,6 +84,11 @@ cd sahara-healthcare-suite
 cp .env.example .env
 # Add your INTRON_API_KEY inside the .env file
 
-# 3. Install dependencies and start the local server
+# 3. Install dependencies and start the API
+python -m pip install -r requirements.txt
+export INTRON_API_KEY="your-key"
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+# 4. In another terminal, serve the static frontend
 npm install
 npm start

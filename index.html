@@ -697,6 +697,8 @@
   let websocketRetryDelayMs = 100;
   let websocketReconnectTimer = null;
   let lastAckTs = 0;
+  const pendingAudioFrames = new Map();
+  const MAX_PENDING_AUDIO_FRAMES = 240;
   const OFFLINE_DB_NAME = 'sahara-healthcare-suite';
   const OFFLINE_STORE_NAME = 'offline-sync-queue';
 
@@ -726,6 +728,53 @@
     });
   }
 
+  function offlinePcmToWav(records) {
+    const audioRecords = records
+      .filter(record => record.type === 'audio' && Array.isArray(record.buffer))
+      .sort((left, right) => (left.sequence || 0) - (right.sequence || 0));
+    if (!audioRecords.length) return null;
+
+    const pcmBytes = new Uint8Array(audioRecords.reduce((total, record) => total + record.buffer.length, 0));
+    let offset = 0;
+    audioRecords.forEach(record => {
+      const bytes = new Uint8Array(record.buffer);
+      pcmBytes.set(bytes, offset);
+      offset += bytes.length;
+    });
+
+    const header = new ArrayBuffer(44);
+    const view = new DataView(header);
+    const writeText = (position, value) => [...value].forEach((character, index) => view.setUint8(position + index, character.charCodeAt(0)));
+    writeText(0, 'RIFF');
+    view.setUint32(4, 36 + pcmBytes.length, true);
+    writeText(8, 'WAVE');
+    writeText(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 16000, true);
+    view.setUint32(28, 32000, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeText(36, 'data');
+    view.setUint32(40, pcmBytes.length, true);
+    return new Blob([header, pcmBytes], { type: 'audio/wav' });
+  }
+
+  async function replayOfflineRecords(records) {
+    const audioBlob = offlinePcmToWav(records);
+    if (!audioBlob) return false;
+    const form = new FormData();
+    form.append('audio_file_blob', audioBlob, 'offline-recovery.wav');
+    form.append('audio_file_name', 'offline-recovery.wav');
+    form.append('use_language_asr_input', 'am');
+    form.append('use_category', 'file_category_telehealth');
+    form.append('use_disable_llm_corrections', 'FALSE');
+    const response = await fetch(`${getApiOrigin()}/api/intron/stt/upload-sync`, { method: 'POST', body: form });
+    if (!response.ok) throw new Error(`Offline replay failed (${response.status})`);
+    return true;
+  }
+
   async function flushOfflineQueue() {
     if (!('indexedDB' in window) || navigator.onLine === false) return;
     const db = await openOfflineQueueDb();
@@ -741,12 +790,32 @@
         }
         try {
           const worker = new Worker('offline-sync-worker.js');
-          worker.postMessage({ type: 'flush' });
-          worker.onmessage = () => {
-            const clearTx = db.transaction(OFFLINE_STORE_NAME, 'readwrite');
-            clearTx.objectStore(OFFLINE_STORE_NAME).clear();
-            resolve();
+          worker.onmessage = async (event) => {
+            if (event.data?.type === 'error') {
+              worker.terminate();
+              reject(new Error(event.data.error));
+              return;
+            }
+            if (event.data?.type === 'pending') {
+              try {
+                if (await replayOfflineRecords(event.data.records || [])) {
+                  worker.postMessage({ type: 'clear' });
+                } else {
+                  worker.terminate();
+                  resolve();
+                }
+              } catch (error) {
+                worker.terminate();
+                reject(error);
+              }
+              return;
+            }
+            if (event.data?.type === 'cleared') {
+              worker.terminate();
+              resolve();
+            }
           };
+          worker.postMessage({ type: 'flush' });
         } catch (error) {
           reject(error);
         }
@@ -759,6 +828,18 @@
   window.addEventListener('offline', () => {
     console.warn('Offline: local edge queue activated for queued audio/transcript recovery.');
   });
+
+  function getApiOrigin() {
+    const configuredOrigin = window.SAHARA_API_ORIGIN;
+    const defaultOrigin = window.location.port === '8000'
+      ? window.location.origin
+      : `${window.location.protocol === 'https:' ? 'https:' : 'http:'}//${window.location.hostname}:8000`;
+    const apiUrl = new URL(configuredOrigin || defaultOrigin, window.location.origin);
+    if (!['http:', 'https:'].includes(apiUrl.protocol)) {
+      throw new Error('The configured API origin must use HTTP or HTTPS.');
+    }
+    return apiUrl.origin;
+  }
 
   function scheduleWebSocketReconnect() {
     if (websocketReconnectTimer || !isRecordingTriage) return;
@@ -782,12 +863,7 @@
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       return Promise.resolve(websocket);
     }
-    const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
-    const apiOrigin = window.SAHARA_API_ORIGIN || configuredOrigin || (
-      window.location.port === '8000'
-        ? window.location.origin
-        : `${window.location.protocol === 'https:' ? 'https:' : 'http:'}//${window.location.hostname}:8000`
-    );
+    const apiOrigin = getApiOrigin();
     const apiUrl = new URL(apiOrigin);
     const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(window.location.hostname);
     if (!isSecureContext && apiUrl.protocol === 'https:') {
@@ -806,6 +882,7 @@
           status.dataset.baseStatus = 'Connected. Listening to code-switched audio stream...';
           status.innerText = status.dataset.baseStatus;
         }
+        replayPendingAudioFrames(websocket);
         resolve(websocket);
       };
       websocket.onmessage = (event) => {
@@ -813,6 +890,9 @@
           const payload = typeof event.data === 'string' ? JSON.parse(event.data) : null;
           if (payload && typeof payload.ack_ts === 'number') {
             lastAckTs = payload.ack_ts;
+            for (const [timestamp] of pendingAudioFrames) {
+              if (timestamp <= lastAckTs) pendingAudioFrames.delete(timestamp);
+            }
             if (workletNode) {
               workletNode.port.postMessage({ command: 'ACK', ackTimestamp: lastAckTs });
             }
@@ -869,7 +949,7 @@
       (review.medication_suggestions_blocked
         ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
         : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200');
-    const alerts = (review.alerts || []).map((alert) => `<div>• ${alert}</div>`).join('');
+    const alerts = (review.alerts || []).map((alert) => `<div>• ${escapeHtmlFollowup(alert)}</div>`).join('');
     panel.innerHTML = `<strong>Clinician review required</strong>${alerts}`;
     const target = document.getElementById('triage-recommendation');
     if (target) target.appendChild(panel);
@@ -919,9 +999,11 @@
 
   async function startAudioStreaming(socket, existingStream = null) {
     try {
-      const connectedSocket = socket && socket.readyState === WebSocket.OPEN
-        ? socket
-        : await initWebSocket();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        websocket = socket;
+      } else {
+        await initWebSocket();
+      }
 
       mediaStream = existingStream || await navigator.mediaDevices.getUserMedia({ audio: true });
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -932,9 +1014,19 @@
       workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
 
       workletNode.port.onmessage = (event) => {
-        if (connectedSocket.readyState === WebSocket.OPEN) {
-          const packet = event.data;
-          if (!packet || !packet.pcmBuffer) return;
+        const currentSocket = websocket;
+        const packet = event.data;
+        if (!packet || !packet.pcmBuffer) return;
+        const frame = {
+          sequence: packet.sequence,
+          timestamp_ms: packet.timestamp,
+          pcmBuffer: packet.pcmBuffer.slice(0)
+        };
+        pendingAudioFrames.set(frame.timestamp_ms, frame);
+        while (pendingAudioFrames.size > MAX_PENDING_AUDIO_FRAMES) {
+          pendingAudioFrames.delete(pendingAudioFrames.keys().next().value);
+        }
+        if (currentSocket && currentSocket.readyState === WebSocket.OPEN) {
           if (firstAudioFrameSentAt === null) {
             firstAudioFrameSentAt = performance.now();
             window.__streamingMetrics.first_audio_sent_at = firstAudioFrameSentAt;
@@ -942,22 +1034,22 @@
 
           const metadata = JSON.stringify({
             type: 'audio_meta',
-            sequence: packet.sequence,
-            timestamp_ms: packet.timestamp,
+            sequence: frame.sequence,
+            timestamp_ms: frame.timestamp_ms,
             ack_ts: lastAckTs
           });
 
           if (!navigator.onLine) {
             persistOfflineRecord({
               type: 'audio',
-              sequence: packet.sequence,
-              timestamp_ms: packet.timestamp,
-              buffer: Array.from(new Uint8Array(packet.pcmBuffer))
+              sequence: frame.sequence,
+              timestamp_ms: frame.timestamp_ms,
+              buffer: Array.from(new Uint8Array(frame.pcmBuffer))
             });
           }
 
-          connectedSocket.send(metadata);
-          connectedSocket.send(packet.pcmBuffer);
+          currentSocket.send(metadata);
+          currentSocket.send(frame.pcmBuffer);
         }
       };
 
@@ -970,6 +1062,20 @@
       if (status) status.innerText = `Microphone streaming unavailable: ${err.message}`;
       stopAudioStreaming();
       throw err;
+    }
+  }
+
+  function replayPendingAudioFrames(socket) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    for (const frame of pendingAudioFrames.values()) {
+      if (frame.timestamp_ms <= lastAckTs) continue;
+      socket.send(JSON.stringify({
+        type: 'audio_meta',
+        sequence: frame.sequence,
+        timestamp_ms: frame.timestamp_ms,
+        ack_ts: lastAckTs
+      }));
+      socket.send(frame.pcmBuffer);
     }
   }
 
@@ -1237,11 +1343,7 @@
   const sub = document.getElementById('diag-api-sub');
   if (sub) sub.innerText = "Pinging Sahara API ...";
   const startTime = Date.now();
-  const apiOrigin = window.SAHARA_API_ORIGIN || (
-    window.location.port === '8000'
-      ? window.location.origin
-      : `${window.location.protocol === 'https:' ? 'https:' : 'http:'}//${window.location.hostname}:8000`
-  );
+  const apiOrigin = getApiOrigin();
   try {
     const response = await fetch(`${apiOrigin}/health`, { headers: { Accept: 'application/json' } });
     const latency = Date.now() - startTime;
@@ -1386,6 +1488,8 @@
       const progress = document.getElementById('mic-progress');
       if (!isRecordingTriage) {
         try {
+          pendingAudioFrames.clear();
+          lastAckTs = 0;
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           reviewAudioContext = new (window.AudioContext || window.webkitAudioContext)();
           reviewAudioSource = reviewAudioContext.createMediaStreamSource(stream);
@@ -1470,8 +1574,7 @@
         if (status) status.innerText = "Record and save audio before uploading.";
         return;
       }
-      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
-      const apiOrigin = window.SAHARA_API_ORIGIN || configuredOrigin || `${window.location.protocol}//${window.location.hostname}:8000`;
+      const apiOrigin = getApiOrigin();
       const form = new FormData();
       form.append("audio_file_blob", savedRecordingBlob, "sahara-recording.wav");
       form.append("audio_file_name", "sahara-recording.wav");
@@ -1522,7 +1625,26 @@
       renderDiscrepancyPanel(box ? box.innerText : '', document.getElementById('ehr-cc')?.value || '');
     }
 
-    function triggerEHRSync() {
+    function buildFhirRequest() {
+      return {
+        patient_id: 'ETH-PATIENT-90412',
+        encounter_id: 'ENC-90412',
+        gender: 'female',
+        chief_complaint: document.getElementById('ehr-cc')?.value || 'Chest Pain & Headache',
+        duration: document.getElementById('ehr-duration')?.value || null,
+        blood_pressure: document.getElementById('ehr-bp')?.value || null,
+        pulse: document.getElementById('ehr-pulse')?.value || null,
+        temperature: document.getElementById('ehr-temp')?.value || null,
+        diagnosis_code: 'R07.9',
+        diagnosis_display: 'Chest pain, unspecified',
+        medications: (document.getElementById('ehr-meds')?.value || '')
+          .split('\n')
+          .map((item) => item.replace(/^\d+\.\s*/, '').trim())
+          .filter(Boolean)
+      };
+    }
+
+    async function triggerEHRSync() {
       if (!window.clinicalSignOffVerified) {
         alert('Clinician sign-off is required before committing patient data to the EHR or exporting HL7 FHIR records.');
         return;
@@ -1530,11 +1652,26 @@
       const syncBtn = document.getElementById('btn-sync-ehr');
       if (syncBtn) {
         syncBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Syncing to OpenMRS FHIR...`;
-        setTimeout(() => {
+      }
+      try {
+        const response = await fetch(`${getApiOrigin()}/api/v1/ehr/commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(buildFhirRequest())
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || `EHR commit failed (${response.status})`);
+        if (syncBtn) {
           syncBtn.innerHTML = `<i class="fa-solid fa-check-circle"></i> Synced to OpenMRS!`;
           syncBtn.className = "bg-slate-800 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-4 py-2 rounded-lg";
           syncBtn.disabled = true;
-        }, 1200);
+        }
+      } catch (error) {
+        if (syncBtn) {
+          syncBtn.innerHTML = `<i class="fa-solid fa-database"></i> EHR endpoint unavailable`;
+          syncBtn.disabled = false;
+        }
+        alert(`EHR commit was not completed: ${error.message}`);
       }
     }
 
@@ -1629,8 +1766,8 @@
         const token = segment.replace(/[.,!?]/g, '');
         const flagged = lowConfidence.some(({ text }) => text.toLowerCase().includes(token.toLowerCase()));
         return flagged
-          ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician must verify before export.">${segment}</span>`
-          : `<span class="text-slate-200">${segment}</span>`;
+          ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician must verify before export.">${escapeHtmlFollowup(segment)}</span>`
+          : `<span class="text-slate-200">${escapeHtmlFollowup(segment)}</span>`;
       }).join(' ');
     }
 
@@ -1709,10 +1846,10 @@
           const token = segment.replace(/[.,!?]/g, '');
           const flagged = lowConfidence.some(({ text }) => text.toLowerCase().includes(token.toLowerCase()));
           return flagged
-            ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician verification required.">${segment}</span>`
-            : `<span class="text-slate-200">${segment}</span>`;
+            ? `<span class="text-amber-300 underline decoration-amber-500 decoration-wavy decoration-2" title="Low-confidence phrase; clinician verification required.">${escapeHtmlFollowup(segment)}</span>`
+            : `<span class="text-slate-200">${escapeHtmlFollowup(segment)}</span>`;
         }).join(' ')
-        : safeText;
+          : escapeHtmlFollowup(safeText);
       box.appendChild(p);
       box.scrollTop = box.scrollHeight;
       renderDiscrepancyPanel(safeText, document.getElementById('ehr-cc')?.value || '');
@@ -1855,8 +1992,7 @@
 
     async function uploadEHRAudioForTranscription(blob) {
       ehrSetStatus('Transcribing consultation audio via Intron...');
-      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
-      const apiOrigin = window.SAHARA_API_ORIGIN || configuredOrigin || `${window.location.protocol}//${window.location.hostname}:8000`;
+      const apiOrigin = getApiOrigin();
       const form = new FormData();
       form.append("audio_file_blob", blob, "consultation.webm");
       form.append("audio_file_name", "consultation.webm");
@@ -1901,7 +2037,7 @@
         const line = lines[index];
         index += 1;
         const p = document.createElement('p');
-        p.innerHTML = `<b class="${line.speaker === 'agent' ? 'text-indigo-400' : 'text-emerald-400'}">${line.speaker === 'agent' ? 'AI Agent' : 'Patient'}:</b> "${line.text}"`;
+          p.innerHTML = `<b class="${line.speaker === 'agent' ? 'text-indigo-400' : 'text-emerald-400'}">${line.speaker === 'agent' ? 'AI Agent' : 'Patient'}:</b> "${escapeHtmlFollowup(line.text)}"`;
         if (dialogue) dialogue.appendChild(p);
         if (line.speaker === 'agent') {
           if (callIcon) callIcon.className = "fa-solid fa-phone-volume text-emerald-400 animate-bounce";
@@ -1982,8 +2118,7 @@
     // output, not hand-set hardcoded strings).
     // ---------------------------------------------------------------------
     function getPostCareApiOrigin() {
-      const configuredOrigin = new URLSearchParams(window.location.search).get('api-origin');
-      return window.SAHARA_API_ORIGIN || configuredOrigin || `${window.location.protocol}//${window.location.hostname}:8000`;
+      return getApiOrigin();
     }
 
     async function callPostCareAnalyze(transcript, careTrack) {
@@ -2455,27 +2590,23 @@
       URL.revokeObjectURL(url);
     }
 
-    function exportFhirJson() {
+    async function exportFhirJson() {
       if (!window.clinicalSignOffVerified) {
         alert('A signed clinician review is required before exporting HL7 FHIR records.');
         return;
       }
-      const fhirPayload = {
-        "resourceType": "Bundle",
-        "type": "collection",
-        "timestamp": new Date().toISOString(),
-        "entry": [
-          { "resource": { "resourceType": "Patient", "id": "ETH-PATIENT-90412", "gender": "female", "active": true } },
-          { "resource": { "resourceType": "Encounter", "id": "ENC-90412", "status": "finished", "class": { "code": "AMB", "display": "ambulatory" }, "reasonCode": [{ "text": document.getElementById('ehr-cc')?.value || "Chest Pain & Headache" }] } },
-          { "resource": { "resourceType": "Observation", "id": "OBS-VITALS-90412", "status": "final", "code": { "text": "Vital Signs" }, "component": [
-                { "code": { "text": "BP" }, "valueString": document.getElementById('ehr-bp')?.value || "140/90" },
-                { "code": { "text": "Heart Rate" }, "valueString": document.getElementById('ehr-pulse')?.value || "88 bpm" },
-                { "code": { "text": "Body Temp" }, "valueString": document.getElementById('ehr-temp')?.value || "37.8 C" }
-              ] } },
-          { "resource": { "resourceType": "Condition", "id": "COND-90412", "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "R07.9", "display": "Chest pain, unspecified" }] } } }
-        ]
-      };
-      helperDownloadFile("fhir_encounter_EHR-90412.json", JSON.stringify(fhirPayload, null, 2), "application/json");
+      try {
+        const response = await fetch(`${getApiOrigin()}/api/v1/fhir/export`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/fhir+json' },
+          body: JSON.stringify(buildFhirRequest())
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || `FHIR export failed (${response.status})`);
+        helperDownloadFile("fhir_encounter_EHR-90412.json", JSON.stringify(result, null, 2), "application/fhir+json");
+      } catch (error) {
+        alert(`FHIR export was not completed: ${error.message}`);
+      }
     }
 
     function downloadClinicalSummary() {

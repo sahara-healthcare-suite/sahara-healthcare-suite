@@ -920,6 +920,14 @@ app = FastAPI(
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
 RATE_LIMITED_PATH_PREFIXES = ("/api/v1/transcribe", "/api/intron/stt/upload-sync")
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+MAX_ACTIVE_WEBSOCKETS = 100
+_active_websockets = 0
+REQUIRE_PROXY_AUTH = os.getenv("REQUIRE_PROXY_AUTH", "false").lower() == "true"
+PROXY_IDENTITY_HEADERS = (
+    "cf-access-authenticated-user-email",
+    "x-authenticated-user",
+)
 
 _request_log: dict[str, deque] = {}
 
@@ -950,7 +958,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class ProxyIdentityMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        protected_path = request.url.path.startswith("/api/")
+        if REQUIRE_PROXY_AUTH and protected_path:
+            if not any(request.headers.get(header) for header in PROXY_IDENTITY_HEADERS):
+                return JSONResponse(status_code=401, content={"detail": "Authenticated clinical access is required"})
+        return await call_next(request)
+
+
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ProxyIdentityMiddleware)
 
 # CORS configuration - strict allowlist only
 ALLOWED_ORIGINS = [
@@ -973,6 +991,30 @@ app.add_middleware(
 # Configuration & Keys
 INTRON_API_KEY = os.getenv("INTRON_API_KEY") or ""
 INTRON_ENDPOINT = os.getenv("INTRON_ENDPOINT", "https://api.intron.io/v1/transcribe")
+EHR_FHIR_ENDPOINT = os.getenv("EHR_FHIR_ENDPOINT") or ""
+EHR_API_KEY = os.getenv("EHR_API_KEY") or ""
+
+
+async def _read_limited_upload(upload: UploadFile) -> bytes:
+    contents = await upload.read(MAX_AUDIO_BYTES + 1)
+    if len(contents) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file size exceeds maximum limit of 25MB")
+    return contents
+
+
+def _keyword_is_negated(text: str, keyword: str) -> bool:
+    normalized_keyword = keyword.lower().strip()
+    if normalized_keyword.startswith(("no ", "absent ", "cannot ", "can't ")):
+        return False
+    keyword_match = re.search(re.escape(normalized_keyword), text)
+    if not keyword_match:
+        return False
+    preceding_text = text[max(0, keyword_match.start() - 36):keyword_match.start()]
+    return bool(re.search(r"\b(?:no|not|never|denies?|without)\b[^.!?]{0,32}$", preceding_text))
+
+
+def _has_proxy_identity(headers) -> bool:
+    return any(headers.get(header) for header in PROXY_IDENTITY_HEADERS)
 
 # Ethiopian Medical & Local Symptom Phrase Boosting Dictionary
 ETHIOPIAN_MEDICAL_VOCABULARY: List[str] = [
@@ -1059,6 +1101,24 @@ class ClinicalProcessResponse(BaseModel):
     redactions_count: int = Field(..., ge=0)
     discrepancies: List[str] = Field(default_factory=list)
     sign_off_required: bool = True
+
+
+class FHIRExportRequest(BaseModel):
+    patient_id: str = Field(..., min_length=1, max_length=128)
+    encounter_id: str = Field(..., min_length=1, max_length=128)
+    gender: Optional[str] = Field(default=None, max_length=32)
+    chief_complaint: str = Field(..., min_length=1, max_length=1000)
+    duration: Optional[str] = Field(default=None, max_length=128)
+    blood_pressure: Optional[str] = Field(default=None, max_length=32)
+    pulse: Optional[str] = Field(default=None, max_length=32)
+    temperature: Optional[str] = Field(default=None, max_length=32)
+    diagnosis_code: Optional[str] = Field(default=None, max_length=32)
+    diagnosis_display: Optional[str] = Field(default=None, max_length=256)
+    medications: List[str] = Field(default_factory=list, max_length=20)
+
+
+class EHRCommitRequest(FHIRExportRequest):
+    clinician_id: Optional[str] = Field(default=None, max_length=256)
 
 
 CLINICAL_SYMPTOM_MAP = {
@@ -1243,6 +1303,122 @@ async def process_clinical_text(payload: ClinicalProcessRequest) -> ClinicalProc
     )
 
 
+def _build_fhir_bundle(payload: FHIRExportRequest) -> dict:
+    entries = [
+        {
+            "resource": {
+                "resourceType": "Patient",
+                "id": payload.patient_id,
+                "active": True,
+                **({"gender": payload.gender} if payload.gender else {}),
+            }
+        },
+        {
+            "resource": {
+                "resourceType": "Encounter",
+                "id": payload.encounter_id,
+                "status": "finished",
+                "class": {"code": "AMB", "display": "ambulatory"},
+                "subject": {"reference": f"Patient/{payload.patient_id}"},
+                "reasonCode": [{"text": payload.chief_complaint}],
+                **(
+                    {"extension": [{"url": "https://sahara-healthcare-suite.example/fhir/duration", "valueString": payload.duration}]}
+                    if payload.duration
+                    else {}
+                ),
+            }
+        },
+    ]
+
+    vital_components = []
+    if payload.blood_pressure:
+        vital_components.append({"code": {"text": "Blood pressure"}, "valueString": payload.blood_pressure})
+    if payload.pulse:
+        vital_components.append({"code": {"text": "Heart rate"}, "valueString": payload.pulse})
+    if payload.temperature:
+        vital_components.append({"code": {"text": "Body temperature"}, "valueString": payload.temperature})
+    if vital_components:
+        entries.append(
+            {
+                "resource": {
+                    "resourceType": "Observation",
+                    "status": "final",
+                    "code": {"text": "Vital signs"},
+                    "subject": {"reference": f"Patient/{payload.patient_id}"},
+                    "encounter": {"reference": f"Encounter/{payload.encounter_id}"},
+                    "component": vital_components,
+                }
+            }
+        )
+
+    if payload.diagnosis_code:
+        entries.append(
+            {
+                "resource": {
+                    "resourceType": "Condition",
+                    "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]},
+                    "code": {
+                        "coding": [
+                            {
+                                "system": "http://hl7.org/fhir/sid/icd-10",
+                                "code": payload.diagnosis_code,
+                                "display": payload.diagnosis_display or payload.diagnosis_code,
+                            }
+                        ]
+                    },
+                    "subject": {"reference": f"Patient/{payload.patient_id}"},
+                    "encounter": {"reference": f"Encounter/{payload.encounter_id}"},
+                }
+            }
+        )
+
+    for medication in payload.medications:
+        entries.append(
+            {
+                "resource": {
+                    "resourceType": "MedicationStatement",
+                    "status": "active",
+                    "medicationCodeableConcept": {"text": medication},
+                    "subject": {"reference": f"Patient/{payload.patient_id}"},
+                    "context": {"reference": f"Encounter/{payload.encounter_id}"},
+                }
+            }
+        )
+
+    return {"resourceType": "Bundle", "type": "collection", "entry": entries}
+
+
+@app.post("/api/v1/fhir/export")
+async def export_fhir(payload: FHIRExportRequest) -> dict:
+    """Build a FHIR bundle server-side after the clinician review gate."""
+    return _build_fhir_bundle(payload)
+
+
+@app.post("/api/v1/ehr/commit")
+async def commit_to_ehr(payload: EHRCommitRequest) -> dict:
+    """Send a signed-off FHIR bundle to an explicitly configured EHR endpoint."""
+    if not EHR_FHIR_ENDPOINT:
+        raise HTTPException(status_code=503, detail="EHR_FHIR_ENDPOINT is not configured")
+
+    bundle = _build_fhir_bundle(payload)
+    headers = {"Content-Type": "application/fhir+json", "Accept": "application/fhir+json"}
+    if EHR_API_KEY:
+        headers["Authorization"] = f"Bearer {EHR_API_KEY}"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(EHR_FHIR_ENDPOINT, headers=headers, json=bundle)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.error("EHR commit failed: %s - %s", exc.response.status_code, exc.response.text[:1000])
+        raise HTTPException(status_code=502, detail="Configured EHR rejected the FHIR bundle")
+    except httpx.RequestError as exc:
+        logger.error("EHR commit request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Configured EHR endpoint is unavailable")
+
+    return {"status": "committed", "provider_status": response.status_code}
+
+
 # ---------------------------------------------------------------------------
 # Post-Care Protocol Engine
 # Implements two clinical decision-support layers on top of a transcript:
@@ -1386,7 +1562,10 @@ def _score_recovery_risk(transcript: str) -> dict:
 def _classify_maternal_acuity(transcript: str) -> Optional[dict]:
     text_lower = (transcript or "").lower()
     for level in (1, 2, 3, 4):
-        matched = [kw for kw in MATERNAL_LEVEL_KEYWORDS[level] if kw.lower() in text_lower]
+        matched = [
+            kw for kw in MATERNAL_LEVEL_KEYWORDS[level]
+            if kw.lower() in text_lower and not _keyword_is_negated(text_lower, kw)
+        ]
         if matched:
             info = MATERNAL_ACUITY_LEVELS[level]
             return {
@@ -1441,6 +1620,7 @@ async def health_check():
         "status": "online",
         "service": "AfriHealth AI Gateway",
         "intron_configured": bool(INTRON_API_KEY),
+        "ehr_configured": bool(EHR_FHIR_ENDPOINT),
         "boost_phrases_loaded": len(ETHIOPIAN_MEDICAL_VOCABULARY)
     }
 
@@ -1464,25 +1644,10 @@ async def transcribe_audio(
     Proxies audio payload to Intron v2.5 API with medical phrase boosting.
     """
     if not INTRON_API_KEY:
-        logger.warning("INTRON_API_KEY not set. Returning judge-mode mock response.")
-        return JSONResponse(
-            status_code=200,
-            content={
-                "mode": "fallback_judge_mode",
-                "transcript": "ከፍተኛ ትኩሳት እና ሳል አለው:: Paracetamol 500mg t.i.d. given.",
-                "confidence_score": 0.89,
-                "entities": [
-                    {"text": "ትኩሳት", "type": "SYMPTOM", "confidence": 0.95},
-                    {"text": "Paracetamol 500mg", "type": "MEDICATION", "confidence": 0.92, "boosted": True}
-                ],
-                "flagged_terms": []
-            }
-        )
+        raise HTTPException(status_code=503, detail="Intron API key not configured on server")
 
     # Validate file size (Limit to 25MB)
-    contents = await file.read()
-    if len(contents) > 25 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Audio file size exceeds maximum limit of 25MB")
+    contents = await _read_limited_upload(file)
 
     # Merge default medical vocabulary with any runtime custom phrases
     payload_keywords = ETHIOPIAN_MEDICAL_VOCABULARY.copy()
@@ -1537,13 +1702,28 @@ INTRON_STREAM_ENDPOINT = "wss://infer.voice.intron.io/stt/v1/stream"
 
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket):
+    global _active_websockets
+    origin = websocket.headers.get("origin")
+    if origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=1008)
+        return
+    if REQUIRE_PROXY_AUTH and not _has_proxy_identity(websocket.headers):
+        await websocket.close(code=1008)
+        return
+    if not INTRON_API_KEY:
+        await websocket.close(code=1011)
+        return
+    if _active_websockets >= MAX_ACTIVE_WEBSOCKETS:
+        await websocket.close(code=1013)
+        return
+
+    _active_websockets += 1
     await websocket.accept()
 
     language = websocket.query_params.get("use_language_asr_input", "am")
-
-    if not INTRON_API_KEY:
-        await websocket.send_json({"error": "Intron API key not configured on server"})
-        await websocket.close()
+    if not re.fullmatch(r"[a-z]{2,8}(?:-[A-Z]{2})?", language):
+        await websocket.close(code=1008)
+        _active_websockets -= 1
         return
 
     intron_url = f"{INTRON_STREAM_ENDPOINT}?sample_rate=16000&bit_rate=16&num_channels=1&use_language_asr_input={language}"
@@ -1567,7 +1747,11 @@ async def websocket_stream(websocket: WebSocket):
                         elif data.get("text") is not None:
                             try:
                                 msg = json.loads(data["text"])
-                                if msg.get("event") == "stop":
+                                if msg.get("type") == "audio_meta":
+                                    timestamp_ms = msg.get("timestamp_ms")
+                                    if isinstance(timestamp_ms, (int, float)) and not isinstance(timestamp_ms, bool):
+                                        await websocket.send_json({"ack_ts": timestamp_ms})
+                                elif msg.get("event") == "stop":
                                     await intron_ws.send(json.dumps({"message_type": "COMMIT"}))
                             except json.JSONDecodeError:
                                 pass
@@ -1600,6 +1784,7 @@ async def websocket_stream(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        _active_websockets = max(0, _active_websockets - 1)
         try:
             await websocket.close()
         except Exception:
@@ -1617,7 +1802,7 @@ async def intron_stt_upload_sync(request: Request):
     if audio_file is None:
         raise HTTPException(status_code=400, detail="Missing audio_file_blob in form data")
 
-    file_bytes = await audio_file.read()
+    file_bytes = await _read_limited_upload(audio_file)
     filename = form.get("audio_file_name") or getattr(audio_file, "filename", "recording.wav")
 
     files_payload = {
@@ -1696,7 +1881,24 @@ MATERNAL_EMERGENCY_NARRATION_AM = (
     "እባክዎ ወዲያውኑ ወደ ጤና ተቋም ይሂዱ ወይም ድንገተኛ እርዳታ ይደውሉ። ይህ በጣም አስቸኳይ ሁኔታ ሊሆን ይችላል።"
 )
 
+FOLLOWUP_SESSION_TTL_SECONDS = 60 * 60
+MAX_FOLLOWUP_SESSIONS = 1000
 _followup_sessions: dict = {}
+
+
+def _prune_followup_sessions() -> None:
+    now = time.time()
+    expired = [
+        session_id for session_id, session in _followup_sessions.items()
+        if now - session["last_access"] > FOLLOWUP_SESSION_TTL_SECONDS
+    ]
+    for session_id in expired:
+        _followup_sessions.pop(session_id, None)
+
+    if len(_followup_sessions) > MAX_FOLLOWUP_SESSIONS:
+        oldest = sorted(_followup_sessions, key=lambda key: _followup_sessions[key]["last_access"])
+        for session_id in oldest[:len(_followup_sessions) - MAX_FOLLOWUP_SESSIONS]:
+            _followup_sessions.pop(session_id, None)
 
 
 class SessionStartRequest(BaseModel):
@@ -1739,9 +1941,13 @@ async def _intron_stt_transcribe(file_bytes: bytes, filename: str, content_type:
 
 @app.post("/api/v1/post-care/session/start")
 async def start_followup_session(payload: SessionStartRequest):
+    _prune_followup_sessions()
     care_track = payload.care_track if payload.care_track in FOLLOWUP_QUESTIONS else "general"
     session_id = str(uuid.uuid4())
-    _followup_sessions[session_id] = {"care_track": care_track, "question_index": 0, "transcripts": []}
+    _followup_sessions[session_id] = {
+        "care_track": care_track, "question_index": 0, "transcripts": [],
+        "created_at": time.time(), "last_access": time.time(), "complete": False,
+    }
 
     question_text = FOLLOWUP_QUESTIONS[care_track][0]
     audio_url = await _intron_tts_generate(question_text)
@@ -1758,18 +1964,22 @@ async def start_followup_session(payload: SessionStartRequest):
 
 @app.post("/api/v1/post-care/session/answer")
 async def answer_followup_question(request: Request, session_id: str):
+    _prune_followup_sessions()
     if session_id not in _followup_sessions:
         raise HTTPException(status_code=404, detail="Session not found or expired")
     if not INTRON_API_KEY:
         raise HTTPException(status_code=503, detail="Intron API key not configured on server")
 
     session = _followup_sessions[session_id]
+    if session["complete"]:
+        raise HTTPException(status_code=409, detail="Session is already complete")
+    session["last_access"] = time.time()
     form = await request.form()
     audio_file = form.get("audio_file_blob")
     if audio_file is None:
         raise HTTPException(status_code=400, detail="Missing audio_file_blob in form data")
 
-    file_bytes = await audio_file.read()
+    file_bytes = await _read_limited_upload(audio_file)
     filename = getattr(audio_file, "filename", "answer.wav")
     transcript = await _intron_stt_transcribe(file_bytes, filename, audio_file.content_type)
     session["transcripts"].append(transcript)

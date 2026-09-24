@@ -20,9 +20,9 @@ Browser
 Cloudflare Pages       Separate FastAPI service
 static frontend  --->  /health
                        /api/intron/stt/upload-sync
-                       /api/intron/tts/*
+                      /api/v1/fhir/export
+                      /api/v1/ehr/commit
                        /ws/stream
-                       /ws/tts
                               |
                               v
                        Intron Voice API
@@ -39,6 +39,7 @@ Configure these only on the API host:
 ```text
 INTRON_API_KEY=...
 ALLOWED_ORIGINS=https://your-project.pages.dev
+REQUIRE_PROXY_AUTH=true
 ```
 
 Use a comma-separated list for multiple exact origins. Do not use `*` for
@@ -46,15 +47,27 @@ production CORS when credentials or protected clinical workflows are involved.
 Do not commit `.env` files, API keys, patient recordings, full transcripts, or
 provider response IDs.
 
+`/api/v1/fhir/export` always builds a server-side FHIR bundle. `/api/v1/ehr/commit`
+returns `503` until `EHR_FHIR_ENDPOINT` is configured, and then submits the
+bundle with the optional `EHR_API_KEY`.
+
+For production, put the FastAPI service behind an identity-aware gateway such
+as Cloudflare Access. Configure the gateway to strip incoming
+`X-Authenticated-User` and `Cf-Access-Authenticated-User-Email` headers, then
+inject one only after successful clinician authentication. Set
+`REQUIRE_PROXY_AUTH=true` and firewall the FastAPI origin so it is reachable
+only through that gateway. Origin checks alone are not user authentication.
+
 ## Run the API
 
 Install the Python dependencies and start the service on an externally
 reachable interface:
 
-```powershell
+```bash
 python -m pip install -r requirements.txt
-$env:INTRON_API_KEY = "your-key"
-$env:ALLOWED_ORIGINS = "https://your-project.pages.dev"
+export INTRON_API_KEY="your-key"
+export ALLOWED_ORIGINS="https://your-project.pages.dev"
+export REQUIRE_PROXY_AUTH="true"
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -98,6 +111,8 @@ deployment process rather than edited manually for each environment.
 7. Confirm a request from an unapproved origin is rejected by CORS.
 8. Review hosting logs and retention settings before handling real patient
    information.
+9. Confirm unauthenticated HTTP and WebSocket requests are rejected when
+   `REQUIRE_PROXY_AUTH=true`.
 
 ## Operational boundaries
 

@@ -20,12 +20,14 @@ Browser (index.html)
   +--> FastAPI service (main.py :8000)
           |-- server-side Intron API-key boundary
           |-- streaming STT WebSocket proxy
-          |-- streaming TTS WebSocket proxy
+          |-- follow-up TTS generation bridge
           |-- synchronous STT upload bridge
+          |-- server-side FHIR export and optional EHR commit
           |-- synchronous TTS generation and status bridges
           |-- clinical artifact and medication safety gate
           |
           +--> Intron Sahara STT/TTS APIs
+          +--> Configured FHIR/EHR endpoint (optional)
 
 Optional local static server (server.js or npm start :3000)
   |-- serves the browser files

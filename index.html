@@ -299,6 +299,14 @@
                 </button>
                 <span id="ehr-live-badge" class="text-[10px] text-slate-500 font-mono">Idle</span>
               </div>
+              <div class="flex items-center gap-2 mb-3">
+                <label for="ehr-speaker-label" class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Recording speaker</label>
+                <select id="ehr-speaker-label" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:border-teal-500 focus:outline-none">
+                  <option value="Doctor">Doctor</option>
+                  <option value="Patient">Patient</option>
+                </select>
+                <span class="text-[10px] text-slate-500">Select the speaker before each segment.</span>
+              </div>
               <p id="ehr-record-status" class="text-[11px] text-slate-500 mb-3">Record the live doctor-patient conversation; the chart on the right auto-fills as fields are recognized.</p>
               <div id="ehr-transcript-box" class="p-4 bg-slate-900 rounded-lg border border-slate-800 text-xs font-mono leading-relaxed space-y-2 h-[260px] overflow-y-auto text-slate-300">
                 <p class="text-slate-500 italic">Click "Start Consultation Recording" to capture live audio, or "Load Consultation Demo" for a scripted example...</p>
@@ -653,6 +661,42 @@
               <p class="font-semibold text-amber-400"><i class="fa-solid fa-user-doctor mr-1"></i> Clinician Review Notes:</p>
               <p id="evaluator-comment-text" class="leading-relaxed">Intron Sahara v2.5 maintains accurate phonetic grounding for local disease descriptions without hallucinatory translations.</p>
             </div>
+          </div>
+        </div>
+        <div class="mt-6 bg-slate-950 p-5 rounded-xl border border-emerald-500/20 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-microphone-lines text-emerald-400 mr-2"></i>Live Intron Sahara v2.5 Benchmark</h3>
+              <p class="text-[11px] text-slate-500 mt-1">Upload or record one reviewed Amharic-English sample and measure the configured Intron provider. OpenAI and Gemini can be added later.</p>
+            </div>
+            <span id="live-benchmark-status" class="text-[10px] font-mono text-slate-500">Ready</span>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <label for="live-benchmark-file" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sample audio</label>
+              <input id="live-benchmark-file" type="file" accept="audio/*" class="mt-1 w-full text-xs text-slate-400 file:mr-3 file:rounded file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-teal-300 hover:file:bg-slate-700">
+              <div class="flex items-center gap-2 mt-2">
+                <button id="live-benchmark-record" onclick="toggleLiveBenchmarkRecording()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-[11px] font-bold text-slate-200 flex items-center gap-2">
+                  <i class="fa-solid fa-microphone"></i> Record Sample
+                </button>
+                <span id="live-benchmark-recording-status" class="text-[10px] text-slate-500">No recording</span>
+              </div>
+            </div>
+            <div>
+              <label for="live-benchmark-reference" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Verified reference transcript</label>
+              <textarea id="live-benchmark-reference" rows="4" class="mt-1 w-full resize-y bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Paste the approved Amharic-English reference transcript..."></textarea>
+            </div>
+          </div>
+          <button onclick="runLiveProviderBenchmark()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2">
+            <i class="fa-solid fa-chart-line"></i> Run Live Benchmark
+          </button>
+          <div id="live-benchmark-results" class="hidden overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="text-slate-400 border-b border-slate-800">
+                <tr><th class="py-2">Provider</th><th class="py-2">Status</th><th class="py-2">Latency</th><th class="py-2">WER</th><th class="py-2">CER</th><th class="py-2">Transcript</th></tr>
+              </thead>
+              <tbody id="live-benchmark-results-body" class="divide-y divide-slate-800/60 font-mono"></tbody>
+            </table>
           </div>
         </div>
         <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
@@ -1752,6 +1796,7 @@
     let ehrMediaRecorder = null;
     let ehrAudioChunks = [];
     let ehrLiveTranscript = "";
+    let ehrCurrentSpeaker = "Doctor";
     const soapState = {
       transcript: '',
       subjective: '',
@@ -2097,12 +2142,15 @@
         setEHRRecordButtonState(false);
         return;
       }
+      ehrCurrentSpeaker = document.getElementById('ehr-speaker-label')?.value || 'Doctor';
       ehrLiveTranscript = "";
-      soapManualFields.clear();
-      setSoapVerificationState(false);
-      updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
+      if (!soapState.transcript.trim()) {
+        soapManualFields.clear();
+        setSoapVerificationState(false);
+        updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
+      }
       const box = document.getElementById('ehr-transcript-box');
-      if (box) box.innerHTML = "";
+      if (box && !soapState.transcript.trim()) box.innerHTML = "";
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         ehrAudioChunks = [];
@@ -2137,7 +2185,9 @@
         if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
         const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
         if (transcript) {
-          appendEHRTranscriptLine(transcript);
+          const labeledTranscript = `${ehrCurrentSpeaker}: ${transcript}`;
+          ehrLiveTranscript = labeledTranscript;
+          appendEHRTranscriptLine(labeledTranscript);
           extractEHRFields(transcript);
           ehrSetStatus('Transcription complete. Fields auto-filled below -- please verify.');
         } else {
@@ -2494,6 +2544,83 @@
       document.getElementById('followup-real-start-btn').classList.remove('hidden');
       document.getElementById('followup-real-start-btn').disabled = false;
       document.getElementById('followup-real-start-btn').innerText = 'Start Another Call';
+    }
+
+    let liveBenchmarkRecorder = null;
+    let liveBenchmarkChunks = [];
+    let liveBenchmarkAudioBlob = null;
+
+    function setLiveBenchmarkStatus(text, className = 'text-[10px] font-mono text-slate-500') {
+      const status = document.getElementById('live-benchmark-status');
+      if (status) {
+        status.innerText = text;
+        status.className = className;
+      }
+    }
+
+    async function toggleLiveBenchmarkRecording() {
+      const button = document.getElementById('live-benchmark-record');
+      const status = document.getElementById('live-benchmark-recording-status');
+      if (liveBenchmarkRecorder?.state === 'recording') {
+        liveBenchmarkRecorder.stop();
+        if (button) button.innerHTML = '<i class="fa-solid fa-microphone"></i> Record Sample';
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        liveBenchmarkChunks = [];
+        liveBenchmarkRecorder = new MediaRecorder(stream);
+        liveBenchmarkRecorder.ondataavailable = (event) => liveBenchmarkChunks.push(event.data);
+        liveBenchmarkRecorder.onstop = () => {
+          stream.getTracks().forEach((track) => track.stop());
+          liveBenchmarkAudioBlob = new Blob(liveBenchmarkChunks, { type: 'audio/webm' });
+          if (status) status.innerText = 'Recorded sample ready';
+          setLiveBenchmarkStatus('Ready to benchmark');
+        };
+        liveBenchmarkRecorder.start();
+        if (button) button.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Sample';
+        if (status) status.innerText = 'Recording...';
+        setLiveBenchmarkStatus('Recording sample', 'text-[10px] font-mono text-amber-300');
+      } catch (error) {
+        if (status) status.innerText = `Microphone unavailable: ${error.message}`;
+      }
+    }
+
+    async function runLiveProviderBenchmark() {
+      const fileInput = document.getElementById('live-benchmark-file');
+      const reference = document.getElementById('live-benchmark-reference')?.value.trim() || '';
+      const audio = fileInput?.files?.[0] || liveBenchmarkAudioBlob;
+      if (!audio) {
+        alert('Upload or record a sample audio file first.');
+        return;
+      }
+      if (!reference) {
+        alert('A verified reference transcript is required for WER and CER scoring.');
+        return;
+      }
+      const form = new FormData();
+      form.append('file', audio, audio.name || 'benchmark-sample.webm');
+      form.append('reference_transcript', reference);
+      form.append('language_code', 'am-ET');
+      form.append('providers', 'intron');
+      setLiveBenchmarkStatus('Running Intron Sahara v2.5...', 'text-[10px] font-mono text-emerald-300');
+      try {
+        const response = await fetch(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || `Benchmark failed (${response.status})`);
+        const body = document.getElementById('live-benchmark-results-body');
+        const panel = document.getElementById('live-benchmark-results');
+        if (body) {
+          body.innerHTML = result.results.map((item) => {
+            const complete = item.status === 'complete';
+            return `<tr><td class="py-2 text-slate-200">${escapeHtmlFollowup(item.model)}</td><td class="py-2 ${complete ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtmlFollowup(item.status)}</td><td class="py-2">${item.latency_ms} ms</td><td class="py-2">${complete ? `${(item.WER * 100).toFixed(2)}%` : '--'}</td><td class="py-2">${complete ? `${(item.CER * 100).toFixed(2)}%` : '--'}</td><td class="py-2 max-w-sm whitespace-normal text-slate-400">${complete ? escapeHtmlFollowup(item.transcript) : escapeHtmlFollowup(item.error || 'Provider unavailable')}</td></tr>`;
+          }).join('');
+        }
+        if (panel) panel.classList.remove('hidden');
+        setLiveBenchmarkStatus('Benchmark complete', 'text-[10px] font-mono text-emerald-300');
+      } catch (error) {
+        setLiveBenchmarkStatus(`Benchmark failed: ${error.message}`, 'text-[10px] font-mono text-red-300');
+      }
     }
 
     function initBenchmarkChart() {

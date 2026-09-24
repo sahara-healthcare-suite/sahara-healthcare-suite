@@ -106,6 +106,21 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(len(compositions), 1)
         self.assertEqual(compositions[0]["section"][0]["text"]["div"], "Chest pain for two days.")
 
+    def test_live_benchmark_reports_unconfigured_providers(self):
+        upload = UploadFile(file=io.BytesIO(b"audio"), filename="sample.wav")
+        result = asyncio.run(
+            main.live_benchmark(
+                upload,
+                "Patient has fever and cough.",
+                "am-ET",
+                "intron",
+            )
+        )
+        self.assertEqual(result["benchmark_type"], "live_provider_comparison")
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["model"], "Intron Sahara v2.5")
+        self.assertEqual(result["results"][0]["status"], "unavailable")
+
     def test_ehr_commit_fails_closed_without_endpoint(self):
         payload = main.EHRCommitRequest(
             patient_id="patient-1",

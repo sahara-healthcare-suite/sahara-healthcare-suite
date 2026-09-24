@@ -2093,12 +2093,6 @@
     async function toggleEHRRecording() {
       if (ehrRecording) {
         ehrRecording = false;
-        isRecordingTriage = false;
-        if (websocket && websocket.readyState === WebSocket.OPEN) {
-          websocket.send(JSON.stringify({ event: 'stop' }));
-        }
-        stopAudioStreaming();
-        if (ehrRecognition) { try { ehrRecognition.stop(); } catch (e) {} }
         if (ehrMediaRecorder && ehrMediaRecorder.state === 'recording') ehrMediaRecorder.stop();
         setEHRRecordButtonState(false);
         return;
@@ -2109,25 +2103,6 @@
       updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
       const box = document.getElementById('ehr-transcript-box');
       if (box) box.innerHTML = "";
-      try {
-        pendingAudioFrames.clear();
-        lastAckTs = 0;
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        ehrRecording = true;
-        isRecordingTriage = true;
-        setEHRRecordButtonState(true);
-        ehrSetStatus('Connecting to Intron Amharic-English streaming ASR...');
-        await initWebSocket();
-        await startAudioStreaming(websocket, stream);
-        ehrSetStatus('Streaming directly to Intron Amharic-English ASR.');
-        return;
-      } catch (err) {
-        ehrRecording = false;
-        isRecordingTriage = false;
-        stopAudioStreaming();
-        setEHRRecordButtonState(false);
-        ehrSetStatus(`Intron streaming unavailable (${err.message}); using upload fallback.`);
-      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         ehrAudioChunks = [];
@@ -2141,7 +2116,7 @@
         ehrMediaRecorder.start();
         ehrRecording = true;
         setEHRRecordButtonState(true);
-        ehrSetStatus('Recording consultation audio (no on-device recognition in this browser)...');
+        ehrSetStatus('Recording Amharic-English consultation. Stop to send audio to Intron for transcription.');
       } catch (err) {
         ehrSetStatus(`Microphone unavailable: ${err.message}`);
       }

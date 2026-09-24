@@ -299,6 +299,14 @@
                 </button>
                 <span id="ehr-live-badge" class="text-[10px] text-slate-500 font-mono">Idle</span>
               </div>
+              <div class="flex items-center gap-2 mb-3">
+                <label for="ehr-speaker-label" class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Recording speaker</label>
+                <select id="ehr-speaker-label" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:border-teal-500 focus:outline-none">
+                  <option value="Doctor">Doctor</option>
+                  <option value="Patient">Patient</option>
+                </select>
+                <span class="text-[10px] text-slate-500">Select the speaker before each segment.</span>
+              </div>
               <p id="ehr-record-status" class="text-[11px] text-slate-500 mb-3">Record the live doctor-patient conversation; the chart on the right auto-fills as fields are recognized.</p>
               <div id="ehr-transcript-box" class="p-4 bg-slate-900 rounded-lg border border-slate-800 text-xs font-mono leading-relaxed space-y-2 h-[260px] overflow-y-auto text-slate-300">
                 <p class="text-slate-500 italic">Click "Start Consultation Recording" to capture live audio, or "Load Consultation Demo" for a scripted example...</p>
@@ -1752,6 +1760,7 @@
     let ehrMediaRecorder = null;
     let ehrAudioChunks = [];
     let ehrLiveTranscript = "";
+    let ehrCurrentSpeaker = "Doctor";
     const soapState = {
       transcript: '',
       subjective: '',
@@ -2097,12 +2106,15 @@
         setEHRRecordButtonState(false);
         return;
       }
+      ehrCurrentSpeaker = document.getElementById('ehr-speaker-label')?.value || 'Doctor';
       ehrLiveTranscript = "";
-      soapManualFields.clear();
-      setSoapVerificationState(false);
-      updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
+      if (!soapState.transcript.trim()) {
+        soapManualFields.clear();
+        setSoapVerificationState(false);
+        updateSoapState({ transcript: '', subjective: '', objective: '', assessment: '', plan: '' });
+      }
       const box = document.getElementById('ehr-transcript-box');
-      if (box) box.innerHTML = "";
+      if (box && !soapState.transcript.trim()) box.innerHTML = "";
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         ehrAudioChunks = [];
@@ -2137,7 +2149,9 @@
         if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
         const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
         if (transcript) {
-          appendEHRTranscriptLine(transcript);
+          const labeledTranscript = `${ehrCurrentSpeaker}: ${transcript}`;
+          ehrLiveTranscript = labeledTranscript;
+          appendEHRTranscriptLine(labeledTranscript);
           extractEHRFields(transcript);
           ehrSetStatus('Transcription complete. Fields auto-filled below -- please verify.');
         } else {

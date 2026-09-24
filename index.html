@@ -683,7 +683,7 @@
               </div>
             </div>
             <div>
-              <label for="live-benchmark-reference" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Verified reference transcript</label>
+              <label for="live-benchmark-reference" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Verified reference transcript (optional)</label>
               <textarea id="live-benchmark-reference" rows="4" class="mt-1 w-full resize-y bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Paste the approved Amharic-English reference transcript..."></textarea>
             </div>
           </div>
@@ -2594,10 +2594,6 @@
         alert('Upload or record a sample audio file first.');
         return;
       }
-      if (!reference) {
-        alert('A verified reference transcript is required for WER and CER scoring.');
-        return;
-      }
       const form = new FormData();
       form.append('file', audio, audio.name || 'benchmark-sample.webm');
       form.append('reference_transcript', reference);
@@ -2613,7 +2609,7 @@
         if (body) {
           body.innerHTML = result.results.map((item) => {
             const complete = item.status === 'complete';
-            return `<tr><td class="py-2 text-slate-200">${escapeHtmlFollowup(item.model)}</td><td class="py-2 ${complete ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtmlFollowup(item.status)}</td><td class="py-2">${item.latency_ms} ms</td><td class="py-2">${complete ? `${(item.WER * 100).toFixed(2)}%` : '--'}</td><td class="py-2">${complete ? `${(item.CER * 100).toFixed(2)}%` : '--'}</td><td class="py-2 max-w-sm whitespace-normal text-slate-400">${complete ? escapeHtmlFollowup(item.transcript) : escapeHtmlFollowup(item.error || 'Provider unavailable')}</td></tr>`;
+            return `<tr><td class="py-2 text-slate-200">${escapeHtmlFollowup(item.model)}</td><td class="py-2 ${complete ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtmlFollowup(item.status)}</td><td class="py-2">${item.latency_ms} ms</td><td class="py-2">${complete && item.WER !== undefined ? `${(item.WER * 100).toFixed(2)}%` : '--'}</td><td class="py-2">${complete && item.CER !== undefined ? `${(item.CER * 100).toFixed(2)}%` : '--'}</td><td class="py-2 max-w-sm whitespace-normal text-slate-400">${complete ? escapeHtmlFollowup(item.transcript) : escapeHtmlFollowup(item.error || 'Provider unavailable')}</td></tr>`;
           }).join('');
         }
         if (panel) panel.classList.remove('hidden');

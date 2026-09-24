@@ -121,6 +121,11 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["model"], "Intron Sahara v2.5")
         self.assertEqual(result["results"][0]["status"], "unavailable")
 
+    def test_live_benchmark_allows_transcript_only_mode(self):
+        upload = UploadFile(file=io.BytesIO(b"audio"), filename="sample.wav")
+        result = asyncio.run(main.live_benchmark(upload, "", "am-ET", "intron"))
+        self.assertEqual(result["scoring_status"], "transcript_only")
+
     def test_ehr_commit_fails_closed_without_endpoint(self):
         payload = main.EHRCommitRequest(
             patient_id="patient-1",

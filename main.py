@@ -1797,14 +1797,12 @@ async def _run_live_benchmark_provider(name: str, provider, *args) -> dict:
 @app.post("/api/v1/benchmark/live")
 async def live_benchmark(
     file: UploadFile = File(...),
-    reference_transcript: str = Form(...),
+    reference_transcript: str = Form(""),
     language_code: str = Form("am-ET"),
     providers: str = Form("intron"),
 ):
     """Benchmark selected providers; Intron is the default active focus."""
     contents = await _read_limited_upload(file)
-    if not reference_transcript.strip():
-        raise HTTPException(status_code=400, detail="Reference transcript is required")
     requested = {provider.strip().lower() for provider in providers.split(",") if provider.strip()}
     provider_tasks = []
     if "intron" in requested:
@@ -1823,12 +1821,14 @@ async def live_benchmark(
         raise HTTPException(status_code=400, detail="Select at least one supported benchmark provider")
     results = await asyncio.gather(*provider_tasks)
     for result in results:
-        result.update(_benchmark_scores(reference_transcript, result["transcript"]) if result["transcript"] else {})
+        if reference_transcript.strip() and result["transcript"]:
+            result.update(_benchmark_scores(reference_transcript, result["transcript"]))
     return {
         "status": "success",
         "benchmark_type": "live_provider_comparison",
         "language_code": language_code,
         "reference_transcript": reference_transcript,
+        "scoring_status": "scored" if reference_transcript.strip() else "transcript_only",
         "providers": sorted(requested),
         "results": results,
         "interpretation": "Measured sample comparison only; not a clinical performance claim.",

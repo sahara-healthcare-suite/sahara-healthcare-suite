@@ -18,7 +18,8 @@ const CONTENT_TYPES = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*'
+    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
+    'Vary': 'Origin'
   });
   res.end(JSON.stringify(payload));
 }
@@ -46,7 +47,7 @@ function readJsonBody(req) {
 }
 
 async function handleIntronTranscription(req, res) {
-  const apiKey = process.env.INTRON_API_KEY || req.headers.authorization;
+  const apiKey = process.env.INTRON_API_KEY;
   if (!apiKey) {
     return sendJson(res, 401, {
       error: 'Missing Intron API key. Configure INTRON_API_KEY on the server.'
@@ -100,8 +101,9 @@ function serveStatic(res, requestUrl) {
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
+      'Vary': 'Origin',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
     });
     return res.end();

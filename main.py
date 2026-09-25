@@ -886,8 +886,11 @@ import json
 import time
 import logging
 import re
+import wave
+from io import BytesIO
+from urllib.parse import urlencode
 from collections import deque
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -898,7 +901,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import base64
 import websockets
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from edge_persistence import persistence
+
 # Initialize logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("afrihealth_gateway")
@@ -920,8 +928,14 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
-RATE_LIMITED_PATH_PREFIXES = ("/api/v1/transcribe", "/api/intron/stt/upload-sync")
+RATE_LIMITED_PATH_PREFIXES = (
+    "/api/v1/transcribe",
+    "/api/intron/stt/upload-sync",
+    "/api/intron/tts/",
+    "/api/intron/voicebot/",
+)
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
+MAX_AUDIO_DURATION_SECONDS = 120
 MAX_ACTIVE_WEBSOCKETS = 100
 _active_websockets = 0
 REQUIRE_PROXY_AUTH = os.getenv("REQUIRE_PROXY_AUTH", "false").lower() == "true"
@@ -996,13 +1010,20 @@ app.add_middleware(
 
 # Configuration & Keys
 INTRON_API_KEY = os.getenv("INTRON_API_KEY") or ""
-INTRON_ENDPOINT = os.getenv("INTRON_ENDPOINT", "https://api.intron.io/v1/transcribe")
 EHR_FHIR_ENDPOINT = os.getenv("EHR_FHIR_ENDPOINT") or ""
 EHR_API_KEY = os.getenv("EHR_API_KEY") or ""
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or ""
 OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or ""
 GEMINI_TRANSCRIBE_MODEL = os.getenv("GEMINI_TRANSCRIBE_MODEL", "gemini-2.0-flash")
+INTRON_TTS_VOICE_LANGUAGE = os.getenv("INTRON_TTS_VOICE_LANGUAGE", "am")
+INTRON_TTS_VOICE_ACCENT = os.getenv("INTRON_TTS_VOICE_ACCENT", "amharic")
+INTRON_TTS_VOICE_GENDER = os.getenv("INTRON_TTS_VOICE_GENDER", "female")
+
+
+def _intron_auth_header() -> str:
+    key = INTRON_API_KEY.strip()
+    return key if key.lower().startswith("bearer ") else f"Bearer {key}"
 
 
 async def _read_limited_upload(upload: UploadFile) -> bytes:
@@ -1710,18 +1731,42 @@ def _benchmark_scores(reference: str, hypothesis: str) -> dict:
     }
 
 
-async def _post_intron_sync_upload(contents: bytes, filename: str, content_type: str, language_code: str) -> dict:
+def _validate_wav_duration(contents: bytes) -> None:
+    try:
+        with wave.open(BytesIO(contents), "rb") as audio:
+            sample_rate = audio.getframerate()
+            duration = audio.getnframes() / sample_rate if sample_rate else 0
+    except (EOFError, OSError, wave.Error):
+        return
+
+    if duration > MAX_AUDIO_DURATION_SECONDS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio duration exceeds Intron's {MAX_AUDIO_DURATION_SECONDS}-second limit",
+        )
+
+
+async def _post_intron_sync_upload(
+    contents: bytes,
+    filename: str,
+    content_type: str,
+    language_code: str,
+    *,
+    category: str = "file_category_telehealth",
+    disable_llm_corrections: str = "FALSE",
+) -> dict:
+    _validate_wav_duration(contents)
     response_data = {
         "audio_file_name": filename or "recording.wav",
         "use_language_asr_input": (language_code or "am").split("-")[0].lower(),
-        "use_category": "file_category_telehealth",
-        "use_disable_llm_corrections": "FALSE",
+        "use_category": category,
+        "use_disable_llm_corrections": disable_llm_corrections,
     }
     files = {"audio_file_blob": (filename or "recording.wav", contents, content_type or "audio/wav")}
     async with httpx.AsyncClient(timeout=130.0) as client:
         response = await client.post(
             INTRON_SYNC_UPLOAD_ENDPOINT,
-            headers={"Authorization": f"Bearer {INTRON_API_KEY}"},
+            headers={"Authorization": _intron_auth_header()},
             data=response_data,
             files=files,
         )
@@ -1852,61 +1897,31 @@ async def transcribe_audio(
     file: UploadFile = File(...),
     language_code: str = "am-ET"
 ):
-    """
-    Proxies audio payload to Intron v2.5 API with medical phrase boosting.
-    """
+    """Transcribe an uploaded file through Intron's documented sync-upload API."""
     if not INTRON_API_KEY:
         raise HTTPException(status_code=503, detail="Intron API key not configured on server")
 
-    # Validate file size (Limit to 25MB)
     contents = await _read_limited_upload(file)
-
-    # Merge default medical vocabulary with any runtime custom phrases
-    payload_keywords = ETHIOPIAN_MEDICAL_VOCABULARY.copy()
-
-    headers = {
-        "Authorization": f"Bearer {INTRON_API_KEY}",
-        "Accept": "application/json"
-    }
-
-    data_payload = {
-        "language": language_code,
-        "phrase_boost": payload_keywords,  # Intron Custom Vocabulary Boosting
-        "enable_word_confidence": True
-    }
-
-    files_payload = {
-        "file": (file.filename, contents, file.content_type or "audio/wav")
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                INTRON_ENDPOINT,
-                headers=headers,
-                data=data_payload,
-                files=files_payload
-            )
-            response.raise_for_status()
-            res_json = response.json()
-
-            # Process word confidence scoring
-            words = res_json.get("words", [])
-            low_confidence_terms = [
-                w["word"] for w in words if w.get("confidence", 1.0) < 0.70
-            ]
-
-            return {
-                "status": "success",
-                "transcript": res_json.get("transcript", ""),
-                "confidence_score": res_json.get("confidence", 0.0),
-                "low_confidence_flagged": low_confidence_terms,
-                "boosted_vocabulary_count": len(payload_keywords)
-            }
-
+        response = await _post_intron_sync_upload(
+            contents,
+            file.filename or "recording.wav",
+            file.content_type or "audio/wav",
+            language_code,
+        )
+        data = response.get("data", {}) if isinstance(response, dict) else {}
+        return {
+            "status": "success",
+            "transcript": data.get("audio_transcript", ""),
+            "confidence_score": None,
+            "low_confidence_flagged": [],
+            "boosted_vocabulary_count": 0,
+            "file_id": data.get("file_id"),
+            "processing_status": data.get("processing_status"),
+        }
     except httpx.HTTPStatusError as e:
         logger.error(f"Intron API Error: {e.response.status_code} - {e.response.text}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"ASR Provider Error: {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail="Intron sync transcription failed")
     except Exception as e:
         logger.error(f"Internal gateway error: {str(e)}")
         raise HTTPException(status_code=500, detail="Audio transcription gateway processing failed.")
@@ -1963,7 +1978,7 @@ async def websocket_stream(websocket: WebSocket):
 
         async with websockets.connect(
             intron_url,
-            extra_headers={"Authorization": f"Bearer {INTRON_API_KEY}"}
+            additional_headers={"Authorization": _intron_auth_header()}
         ) as intron_ws:
 
             async def forward_browser_to_intron():
@@ -2029,6 +2044,172 @@ async def websocket_stream(websocket: WebSocket):
             pass
 
 INTRON_SYNC_UPLOAD_ENDPOINT = "https://infer.voice.intron.io/file/v1/upload/sync"
+INTRON_TTS_ENDPOINT = "https://infer.voice.intron.io/tts/v1/generate"
+INTRON_TTS_ENQUEUE_ENDPOINT = "https://infer.voice.intron.io/tts/v1/enqueue"
+INTRON_TTS_STREAM_ENDPOINT = "wss://infer.voice.intron.io/tts/v1/stream"
+INTRON_VOICEBOT_WORKFLOWS_ENDPOINT = "https://voicebot.intron.health/voicebot/v1/workflows"
+MAX_TTS_TEXT_LENGTH = 4096
+MIN_TTS_CHUNK_LENGTH = 10
+MAX_TTS_CHUNK_LENGTH = 100
+MAX_TTS_SESSION_SECONDS = 300
+MAX_TTS_IDLE_SECONDS = 60
+
+
+class IntronTTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_TTS_TEXT_LENGTH)
+    voice_language: str = INTRON_TTS_VOICE_LANGUAGE
+    voice_accent: str = INTRON_TTS_VOICE_ACCENT
+    voice_gender: str = INTRON_TTS_VOICE_GENDER
+    output_audio_format: str = "wav"
+
+
+async def _post_intron_json(endpoint: str, payload: dict[str, Any]) -> Any:
+    if not INTRON_API_KEY:
+        raise HTTPException(status_code=503, detail="Intron API key not configured on server")
+
+    try:
+        async with httpx.AsyncClient(timeout=130.0) as client:
+            response = await client.post(
+                endpoint,
+                headers={"Authorization": _intron_auth_header(), "Content-Type": "application/json"},
+                json=payload,
+            )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as error:
+        logger.error("Intron JSON request failed: %s - %s", error.response.status_code, error.response.text)
+        raise HTTPException(status_code=error.response.status_code, detail="Intron request failed") from error
+    except (httpx.RequestError, ValueError) as error:
+        logger.error("Intron JSON request could not be completed: %s", error)
+        raise HTTPException(status_code=502, detail="Failed to communicate with Intron Voice API") from error
+
+
+@app.post("/api/intron/tts/generate")
+async def intron_tts_generate(payload: IntronTTSRequest):
+    return await _post_intron_json(INTRON_TTS_ENDPOINT, payload.model_dump())
+
+
+@app.post("/api/intron/tts/enqueue")
+async def intron_tts_enqueue(payload: IntronTTSRequest):
+    return await _post_intron_json(INTRON_TTS_ENQUEUE_ENDPOINT, payload.model_dump())
+
+
+@app.post("/api/intron/voicebot/workflows")
+async def create_intron_voicebot_workflow(payload: dict[str, Any]):
+    for field in ("name", "workflow_type", "message"):
+        if not isinstance(payload.get(field), str) or not payload[field].strip():
+            raise HTTPException(status_code=422, detail=f"'{field}' must be a non-empty string")
+    return await _post_intron_json(INTRON_VOICEBOT_WORKFLOWS_ENDPOINT, payload)
+
+
+@app.websocket("/ws/intron/tts/stream")
+async def intron_tts_stream(websocket: WebSocket):
+    global _active_websockets
+    origin = websocket.headers.get("origin")
+    if origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=1008)
+        return
+    if REQUIRE_PROXY_AUTH and not _has_proxy_identity(websocket.headers):
+        await websocket.close(code=1008)
+        return
+    if not INTRON_API_KEY:
+        await websocket.close(code=1011)
+        return
+    if _active_websockets >= MAX_ACTIVE_WEBSOCKETS:
+        await websocket.close(code=1013)
+        return
+
+    voice_options = {
+        "voice_language": websocket.query_params.get("voice_language", INTRON_TTS_VOICE_LANGUAGE),
+        "voice_accent": websocket.query_params.get("voice_accent", INTRON_TTS_VOICE_ACCENT),
+        "voice_gender": websocket.query_params.get("voice_gender", INTRON_TTS_VOICE_GENDER),
+    }
+    if any(not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", value) for value in voice_options.values()):
+        await websocket.close(code=1008)
+        return
+
+    _active_websockets += 1
+    await websocket.accept()
+    started_at = time.monotonic()
+    try:
+        upstream_url = f"{INTRON_TTS_STREAM_ENDPOINT}?{urlencode(voice_options)}"
+        async with websockets.connect(
+            upstream_url,
+            additional_headers={"Authorization": _intron_auth_header()},
+            open_timeout=20,
+        ) as intron_ws:
+            async def forward_client_messages():
+                last_text_chunk_at = started_at
+                while True:
+                    now = time.monotonic()
+                    time_remaining = min(
+                        MAX_TTS_SESSION_SECONDS - (now - started_at),
+                        MAX_TTS_IDLE_SECONDS - (now - last_text_chunk_at),
+                    )
+                    if time_remaining <= 0:
+                        await websocket.close(code=1008, reason="TTS stream idle or session limit reached")
+                        return
+                    try:
+                        event = await asyncio.wait_for(websocket.receive(), timeout=time_remaining)
+                    except asyncio.TimeoutError:
+                        await websocket.close(code=1008, reason="TTS stream idle or session limit reached")
+                        return
+                    if event["type"] == "websocket.disconnect":
+                        return
+
+                    message = event.get("text")
+                    if message is None:
+                        await websocket.close(code=1008, reason="TTS streaming expects JSON text messages")
+                        return
+                    try:
+                        payload = json.loads(message)
+                    except json.JSONDecodeError:
+                        await websocket.close(code=1008, reason="Invalid JSON message")
+                        return
+                    if not isinstance(payload, dict):
+                        await websocket.close(code=1008, reason="JSON message must be an object")
+                        return
+
+                    message_type = payload.get("message_type")
+                    if message_type == "INPUT_TEXT_CHUNK":
+                        text = payload.get("text")
+                        if not isinstance(text, str) or not MIN_TTS_CHUNK_LENGTH <= len(text) <= MAX_TTS_CHUNK_LENGTH:
+                            await websocket.close(code=1008, reason="Text chunks must contain 10 to 100 characters")
+                            return
+                        last_text_chunk_at = time.monotonic()
+                    elif message_type == "FETCH_AUDIO_CHUNK":
+                        if not payload.get("chunk_id"):
+                            await websocket.close(code=1008, reason="FETCH_AUDIO_CHUNK requires chunk_id")
+                            return
+                    elif message_type != "COMMIT":
+                        await websocket.close(code=1008, reason="Unsupported TTS stream message_type")
+                        return
+                    await intron_ws.send(json.dumps(payload))
+
+            async def forward_provider_messages():
+                async for message in intron_ws:
+                    if isinstance(message, bytes):
+                        await websocket.send_bytes(message)
+                    else:
+                        await websocket.send_text(message)
+
+            client_task = asyncio.create_task(forward_client_messages())
+            provider_task = asyncio.create_task(forward_provider_messages())
+            done, pending = await asyncio.wait(
+                [client_task, provider_task], return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*done, *pending, return_exceptions=True)
+    except Exception as error:
+        logger.error("Intron TTS streaming bridge error: %s", error)
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        _active_websockets = max(0, _active_websockets - 1)
+
 
 @app.post("/api/intron/stt/upload-sync")
 async def intron_stt_upload_sync(request: Request):
@@ -2043,33 +2224,21 @@ async def intron_stt_upload_sync(request: Request):
     file_bytes = await _read_limited_upload(audio_file)
     filename = form.get("audio_file_name") or getattr(audio_file, "filename", "recording.wav")
 
-    files_payload = {
-        "audio_file_blob": (filename, file_bytes, audio_file.content_type or "audio/wav")
-    }
-    data_payload = {
-        "audio_file_name": filename,
-        "use_language_asr_input": form.get("use_language_asr_input", "am"),
-        "use_category": form.get("use_category", "file_category_telehealth"),
-        "use_disable_llm_corrections": form.get("use_disable_llm_corrections", "FALSE"),
-    }
-    headers = {"Authorization": f"Bearer {INTRON_API_KEY}"}
-
     try:
-        async with httpx.AsyncClient(timeout=130.0) as client:
-            response = await client.post(
-                INTRON_SYNC_UPLOAD_ENDPOINT,
-                headers=headers,
-                data=data_payload,
-                files=files_payload
-            )
-            response.raise_for_status()
-            return response.json()
+        return await _post_intron_sync_upload(
+            file_bytes,
+            filename,
+            audio_file.content_type or "audio/wav",
+            form.get("use_language_asr_input", "am"),
+            category=form.get("use_category", "file_category_telehealth"),
+            disable_llm_corrections=form.get("use_disable_llm_corrections", "FALSE"),
+        )
     except httpx.HTTPStatusError as e:
         logger.error(f"Intron sync upload error: {e.response.status_code} - {e.response.text}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"Intron upload error: {e.response.text}")
-    except Exception as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Intron sync upload failed")
+    except httpx.RequestError as e:
         logger.error(f"Intron sync upload gateway error: {e}")
-        raise HTTPException(status_code=500, detail="Audio upload processing failed.")
+        raise HTTPException(status_code=502, detail="Failed to communicate with Intron Voice API")
 
 # ---------------------------------------------------------------------------
 # Real multi-turn post-care follow-up call
@@ -2088,8 +2257,6 @@ async def intron_stt_upload_sync(request: Request):
 # this ever runs behind multiple workers.
 # ---------------------------------------------------------------------------
 import uuid
-
-INTRON_TTS_ENDPOINT = "https://infer.voice.intron.io/tts/v1/generate"
 
 # Bilingual (Amharic + English) protocol-driven follow-up questions.
 # care_track="maternal" uses the pregnancy/postpartum set instead. A native
@@ -2147,34 +2314,26 @@ async def _intron_tts_generate(text: str, voice_gender: str = "female") -> Optio
     """Returns a real Intron-hosted audio URL, or None if no key is
     configured or the call fails -- callers must handle None (show text,
     or fall back to browser speechSynthesis) rather than assume audio."""
-    if not INTRON_API_KEY:
+    if not INTRON_API_KEY or not text or len(text) > MAX_TTS_TEXT_LENGTH:
         return None
-    headers = {"Authorization": f"Bearer {INTRON_API_KEY}", "Content-Type": "application/json"}
     body = {
-        "text": text, "voice_language": "am", "voice_accent": "amharic",
-        "voice_gender": voice_gender, "output_audio_format": "wav",
+        "text": text,
+        "voice_language": INTRON_TTS_VOICE_LANGUAGE,
+        "voice_accent": INTRON_TTS_VOICE_ACCENT,
+        "voice_gender": voice_gender or INTRON_TTS_VOICE_GENDER,
+        "output_audio_format": "wav",
     }
     try:
-        async with httpx.AsyncClient(timeout=130.0) as client:
-            resp = await client.post(INTRON_TTS_ENDPOINT, headers=headers, json=body)
-            resp.raise_for_status()
-            return resp.json().get("data", {}).get("audio_path")
+        response = await _post_intron_json(INTRON_TTS_ENDPOINT, body)
+        return response.get("data", {}).get("audio_path")
     except Exception as e:
         logger.error(f"Intron TTS error: {e}")
         return None
 
 
 async def _intron_stt_transcribe(file_bytes: bytes, filename: str, content_type: str) -> str:
-    files_payload = {"audio_file_blob": (filename, file_bytes, content_type or "audio/wav")}
-    data_payload = {
-        "audio_file_name": filename, "use_language_asr_input": "am",
-        "use_category": "file_category_telehealth", "use_disable_llm_corrections": "FALSE",
-    }
-    headers = {"Authorization": f"Bearer {INTRON_API_KEY}"}
-    async with httpx.AsyncClient(timeout=130.0) as client:
-        resp = await client.post(INTRON_SYNC_UPLOAD_ENDPOINT, headers=headers, data=data_payload, files=files_payload)
-        resp.raise_for_status()
-        return resp.json().get("data", {}).get("audio_transcript", "")
+    response = await _post_intron_sync_upload(file_bytes, filename, content_type, "am")
+    return str(response.get("data", {}).get("audio_transcript", ""))
 
 
 @app.post("/api/v1/post-care/session/start")

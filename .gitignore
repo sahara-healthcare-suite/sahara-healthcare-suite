@@ -3,6 +3,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+edge_sync.sqlite3
 
 # Local gated benchmark downloads and generated evaluation outputs
 clinical_validation/afriswitch/audio/

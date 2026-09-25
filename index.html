@@ -798,7 +798,20 @@
     AfriHealth AI &bull; Clinician-reviewed voice documentation &bull; Sahara Code-Switch Africa Challenge
   </footer>
 <script>
-  window.SAHARA_API_ORIGIN = "https://sahara-healthcare-suite-production-e636.up.railway.app";
+  if (!window.SAHARA_API_ORIGIN) {
+    const hostname = window.location.hostname;
+    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(hostname);
+    const forwardedApiHostname = hostname.replace(/-3000(?=\.)/, "-8000");
+    const productionApiOrigin = "https://sahara-healthcare-suite-production-e636.up.railway.app";
+
+    if (isLocalhost) {
+      window.SAHARA_API_ORIGIN = `${window.location.protocol}//${hostname}:8000`;
+    } else if (forwardedApiHostname !== hostname) {
+      window.SAHARA_API_ORIGIN = `${window.location.protocol}//${forwardedApiHostname}`;
+    } else {
+      window.SAHARA_API_ORIGIN = productionApiOrigin;
+    }
+  }
 </script>
 <script>
   let mediaStream = null;
@@ -881,7 +894,7 @@
     form.append('use_language_asr_input', 'am');
     form.append('use_category', 'file_category_telehealth');
     form.append('use_disable_llm_corrections', 'FALSE');
-    const response = await fetch(`${getApiOrigin()}/api/intron/stt/upload-sync`, { method: 'POST', body: form });
+    const response = await fetchApi(`${getApiOrigin()}/api/intron/stt/upload-sync`, { method: 'POST', body: form });
     if (!response.ok) throw new Error(`Offline replay failed (${response.status})`);
     return true;
   }
@@ -950,6 +963,10 @@
       throw new Error('The configured API origin must use HTTP or HTTPS.');
     }
     return apiUrl.origin;
+  }
+
+  function fetchApi(input, options = {}) {
+    return fetch(input, { ...options, credentials: 'include' });
   }
 
   function scheduleWebSocketReconnect() {
@@ -1467,7 +1484,7 @@
   const startTime = Date.now();
   const apiOrigin = getApiOrigin();
   try {
-    const response = await fetch(`${apiOrigin}/health`, { headers: { Accept: 'application/json' } });
+    const response = await fetchApi(`${apiOrigin}/health`, { headers: { Accept: 'application/json' } });
     const latency = Date.now() - startTime;
     if (!response.ok) {
       throw new Error(`API returned HTTP ${response.status}`);
@@ -1706,7 +1723,7 @@
       if (upload) upload.disabled = true;
       if (status) status.innerText = "Uploading the reviewed recording to Intron...";
       try {
-        const response = await fetch(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
+        const response = await fetchApi(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
         const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
@@ -1783,7 +1800,7 @@
         syncBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Syncing to OpenMRS FHIR...`;
       }
       try {
-        const response = await fetch(`${getApiOrigin()}/api/v1/ehr/commit`, {
+        const response = await fetchApi(`${getApiOrigin()}/api/v1/ehr/commit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(buildFhirRequest())
@@ -2193,7 +2210,7 @@
       form.append("use_category", "file_category_telehealth");
       form.append("use_disable_llm_corrections", "FALSE");
       try {
-        const response = await fetch(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
+        const response = await fetchApi(`${apiOrigin}/api/intron/stt/upload-sync`, { method: "POST", body: form });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || result.message || `Upload failed (${response.status})`);
         const transcript = result?.data?.audio_transcript || result?.data?.transcript || result?.transcript;
@@ -2318,7 +2335,7 @@
 
     async function callPostCareAnalyze(transcript, careTrack) {
       const apiOrigin = getPostCareApiOrigin();
-      const response = await fetch(`${apiOrigin}/api/v1/post-care/analyze`, {
+      const response = await fetchApi(`${apiOrigin}/api/v1/post-care/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript, care_track: careTrack })
@@ -2433,7 +2450,7 @@
 
       try {
         const apiOrigin = getPostCareApiOrigin();
-        const resp = await fetch(`${apiOrigin}/api/v1/post-care/session/start`, {
+        const resp = await fetchApi(`${apiOrigin}/api/v1/post-care/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ care_track: careTrack })
@@ -2507,7 +2524,7 @@
       form.append('audio_file_blob', blob, 'answer.webm');
       form.append('audio_file_name', 'answer.webm');
       try {
-        const resp = await fetch(`${apiOrigin}/api/v1/post-care/session/answer?session_id=${followupSession.session_id}`, {
+        const resp = await fetchApi(`${apiOrigin}/api/v1/post-care/session/answer?session_id=${followupSession.session_id}`, {
           method: 'POST', body: form
         });
         const data = await resp.json();
@@ -2620,7 +2637,7 @@
       form.append('reference_mode', document.getElementById('live-benchmark-reference-mode')?.value || 'verified');
       setLiveBenchmarkStatus('Running Intron Sahara v2.5...', 'text-[10px] font-mono text-emerald-300');
       try {
-        const response = await fetch(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
+        const response = await fetchApi(`${getApiOrigin()}/api/v1/benchmark/live`, { method: 'POST', body: form });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
           const detail = typeof result.detail === 'string'
@@ -2878,7 +2895,7 @@
         return;
       }
       try {
-        const response = await fetch(`${getApiOrigin()}/api/v1/fhir/export`, {
+        const response = await fetchApi(`${getApiOrigin()}/api/v1/fhir/export`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/fhir+json' },
           body: JSON.stringify(buildFhirRequest())

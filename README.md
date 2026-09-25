@@ -151,7 +151,9 @@ Example variables in `.env.example` include:
 
 ```env
 INTRON_API_KEY=
-INTRON_ENDPOINT=https://api.intron.io/v1/transcribe
+INTRON_TTS_VOICE_LANGUAGE=am
+INTRON_TTS_VOICE_ACCENT=amharic
+INTRON_TTS_VOICE_GENDER=female
 ALLOWED_ORIGINS=https://your-project.pages.dev
 REQUIRE_PROXY_AUTH=false
 EHR_FHIR_ENDPOINT=
@@ -165,8 +167,8 @@ GEMINI_API_KEY=
 GEMINI_TRANSCRIBE_MODEL=gemini-2.0-flash
 ```
 
-OpenAI and Gemini are optional future comparison providers. The current live
-benchmark UI focuses on Intron Sahara v2.5. Keep all provider keys on the
+The FastAPI app loads `.env` automatically for local development. OpenAI and
+Gemini are optional comparison providers. Keep all provider keys on the
 backend; never add them to `index.html`.
 
 ### 3. Install Python dependencies

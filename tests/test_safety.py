@@ -1,7 +1,8 @@
 import asyncio
 import io
 import unittest
-from unittest.mock import Mock
+import wave
+from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import HTTPException, UploadFile
 from starlette.responses import PlainTextResponse
@@ -41,6 +42,50 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as context:
             asyncio.run(main._read_limited_upload(upload))
         self.assertEqual(context.exception.status_code, 413)
+
+    def test_wav_duration_limit_is_enforced(self):
+        wav_data = io.BytesIO()
+        with wave.open(wav_data, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(1)
+            audio.writeframes(b"\0\0" * 121)
+
+        with self.assertRaises(HTTPException) as context:
+            main._validate_wav_duration(wav_data.getvalue())
+        self.assertEqual(context.exception.status_code, 413)
+
+    def test_tts_text_limit_matches_documented_boundary(self):
+        request = main.IntronTTSRequest(text="a" * 4096)
+        self.assertEqual(len(request.text), 4096)
+        with self.assertRaises(ValueError):
+            main.IntronTTSRequest(text="a" * 4097)
+
+    def test_tts_routes_use_documented_provider_urls(self):
+        async def exercise():
+            payload = main.IntronTTSRequest(text="Clinical reminder")
+            for route, endpoint in (
+                (main.intron_tts_generate, main.INTRON_TTS_ENDPOINT),
+                (main.intron_tts_enqueue, main.INTRON_TTS_ENQUEUE_ENDPOINT),
+            ):
+                with patch.object(main, "_post_intron_json", new_callable=AsyncMock) as post:
+                    post.return_value = {"status": "ok"}
+                    result = await route(payload)
+                    self.assertEqual(result, {"status": "ok"})
+                    post.assert_awaited_once_with(endpoint, payload.model_dump())
+
+        asyncio.run(exercise())
+
+    def test_voicebot_workflow_uses_documented_provider_url(self):
+        async def exercise():
+            payload = {"name": "Reminder", "workflow_type": "ROBOCALL", "message": "Hello"}
+            with patch.object(main, "_post_intron_json", new_callable=AsyncMock) as post:
+                post.return_value = {"workflow_id": "workflow-1"}
+                result = await main.create_intron_voicebot_workflow(payload)
+                self.assertEqual(result, {"workflow_id": "workflow-1"})
+                post.assert_awaited_once_with(main.INTRON_VOICEBOT_WORKFLOWS_ENDPOINT, payload)
+
+        asyncio.run(exercise())
 
     def test_followup_session_pruning_removes_expired_sessions(self):
         original_sessions = main._followup_sessions.copy()
@@ -108,15 +153,16 @@ class SafetyTests(unittest.TestCase):
 
     def test_live_benchmark_reports_unconfigured_providers(self):
         upload = UploadFile(file=io.BytesIO(b"audio"), filename="sample.wav")
-        result = asyncio.run(
-            main.live_benchmark(
-                upload,
-                "Patient has fever and cough.",
-                "am-ET",
-                "intron",
-                "verified",
+        with patch.object(main, "INTRON_API_KEY", ""):
+            result = asyncio.run(
+                main.live_benchmark(
+                    upload,
+                    "Patient has fever and cough.",
+                    "am-ET",
+                    "intron",
+                    "verified",
+                )
             )
-        )
         self.assertEqual(result["benchmark_type"], "live_provider_comparison")
         self.assertEqual(len(result["results"]), 1)
         self.assertEqual(result["results"][0]["model"], "Intron Sahara v2.5")
@@ -124,7 +170,8 @@ class SafetyTests(unittest.TestCase):
 
     def test_live_benchmark_allows_transcript_only_mode(self):
         upload = UploadFile(file=io.BytesIO(b"audio"), filename="sample.wav")
-        result = asyncio.run(main.live_benchmark(upload, "", "am-ET", "intron", "verified"))
+        with patch.object(main, "INTRON_API_KEY", ""):
+            result = asyncio.run(main.live_benchmark(upload, "", "am-ET", "intron", "verified"))
         self.assertEqual(result["scoring_status"], "transcript_only")
 
     def test_ehr_commit_fails_closed_without_endpoint(self):

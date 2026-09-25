@@ -20,6 +20,9 @@ Browser
 Cloudflare Pages       Separate FastAPI service
 static frontend  --->  /health
                        /api/intron/stt/upload-sync
+                       /api/intron/tts/generate
+                       /api/intron/tts/enqueue
+                       /api/intron/voicebot/workflows
                       /api/v1/fhir/export
                       /api/v1/ehr/commit
                        /ws/stream
@@ -40,6 +43,9 @@ Configure these only on the API host:
 INTRON_API_KEY=...
 ALLOWED_ORIGINS=https://your-project.pages.dev
 REQUIRE_PROXY_AUTH=true
+INTRON_TTS_VOICE_LANGUAGE=am
+INTRON_TTS_VOICE_ACCENT=amharic
+INTRON_TTS_VOICE_GENDER=female
 ```
 
 Use a comma-separated list for multiple exact origins. Do not use `*` for
@@ -57,6 +63,15 @@ as Cloudflare Access. Configure the gateway to strip incoming
 inject one only after successful clinician authentication. Set
 `REQUIRE_PROXY_AUTH=true` and firewall the FastAPI origin so it is reachable
 only through that gateway. Origin checks alone are not user authentication.
+
+The gateway exposes `POST /api/intron/stt/upload-sync` using the documented
+`audio_file_blob` multipart field; `POST /api/intron/tts/generate` and
+`POST /api/intron/tts/enqueue` accept JSON text up to 4,096 characters;
+`/ws/intron/tts/stream` proxies TTS chunks of 10 to 100 characters with the
+60-second idle and 300-second session limits; and
+`POST /api/intron/voicebot/workflows` creates a workflow. The supplied provider
+documentation does not specify a TTS job-status route, so the gateway does not
+invent one.
 
 ## Run the API
 

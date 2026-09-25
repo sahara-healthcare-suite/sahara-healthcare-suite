@@ -37,6 +37,7 @@ class PCMProcessor extends AudioWorkletProcessor {
         this.isPaused = false;
       } else if (event.data.command === 'FLUSH') {
         this.flushBuffer();
+        this.port.postMessage({ eventType: 'flushed' });
       } else if (event.data.command === 'ACK') {
         this.lastAckTimestamp = Number(event.data.ackTimestamp || 0);
         this.replayBufferedPackets();

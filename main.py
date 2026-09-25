@@ -1926,6 +1926,65 @@ async def transcribe_audio(
         logger.error(f"Internal gateway error: {str(e)}")
         raise HTTPException(status_code=500, detail="Audio transcription gateway processing failed.")
 INTRON_STREAM_ENDPOINT = "wss://infer.voice.intron.io/stt/v1/stream"
+STT_STREAM_MIN_CHUNK_BYTES = 1024
+STT_STREAM_MAX_CHUNK_BYTES = 32 * 1024
+STT_STREAM_MAX_SESSION_SECONDS = 300
+STT_STREAM_MAX_IDLE_SECONDS = 60
+STT_STREAM_TERMINAL_MESSAGES = {
+    "ERROR",
+    "INPUT_ERROR",
+    "AUTHENTICATION_ERROR",
+    "RESOURCE_EXHAUSTED",
+    "QUOTA_EXCEEDED",
+    "CHUNK_SIZE_TOO_SMALL",
+    "CHUNK_SIZE_TOO_LARGE",
+    "INSUFFICIENT_AUDIO_ACTIVITY",
+    "SESSION_TIME_LIMIT_EXCEEDED",
+    "CHUNK_ID_MISMATCH_WITH_TOTAL",
+}
+
+
+def _build_intron_stt_stream_url(query_params) -> str:
+    language = query_params.get("use_language_asr_input", "am")
+    if not re.fullmatch(r"[a-z]{2,8}(?:-[A-Z]{2})?", language):
+        raise ValueError("Invalid STT input language code")
+
+    try:
+        sample_rate = int(query_params.get("sample_rate", "16000"))
+        bit_rate = int(query_params.get("bit_rate", "16"))
+        num_channels = int(query_params.get("num_channels", "1"))
+    except (TypeError, ValueError) as error:
+        raise ValueError("STT audio configuration must use integer values") from error
+
+    if (sample_rate, bit_rate, num_channels) != (16000, 16, 1):
+        raise ValueError("This browser stream supports 16 kHz mono PCM16 audio")
+
+    query = urlencode({
+        "sample_rate": sample_rate,
+        "bit_rate": bit_rate,
+        "num_channels": num_channels,
+        "use_language_asr_input": language,
+    })
+    return f"{INTRON_STREAM_ENDPOINT}?{query}"
+
+
+def _take_stt_audio_chunk(audio_buffer: bytearray, *, final: bool = False) -> bytes | None:
+    buffered_bytes = len(audio_buffer)
+    if buffered_bytes >= STT_STREAM_MAX_CHUNK_BYTES:
+        chunk_size = STT_STREAM_MAX_CHUNK_BYTES
+    elif buffered_bytes >= STT_STREAM_MIN_CHUNK_BYTES:
+        chunk_size = buffered_bytes
+    elif final and buffered_bytes:
+        chunk_size = STT_STREAM_MIN_CHUNK_BYTES
+    else:
+        return None
+
+    available_size = min(buffered_bytes, chunk_size)
+    chunk = bytes(audio_buffer[:available_size])
+    del audio_buffer[:available_size]
+    if available_size < chunk_size:
+        chunk += bytes(chunk_size - available_size)
+    return chunk
 
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket):
@@ -1944,18 +2003,17 @@ async def websocket_stream(websocket: WebSocket):
         await websocket.close(code=1013)
         return
 
-    _active_websockets += 1
-    await websocket.accept()
+    try:
+        intron_url = _build_intron_stt_stream_url(websocket.query_params)
+    except ValueError as error:
+        await websocket.close(code=1008, reason=str(error))
+        return
 
     language = websocket.query_params.get("use_language_asr_input", "am")
     clinic_id = websocket.query_params.get("clinic_id", "default-clinic")
-    if not re.fullmatch(r"[a-z]{2,8}(?:-[A-Z]{2})?", language):
-        await websocket.close(code=1008)
-        _active_websockets -= 1
-        return
-
-    intron_url = f"{INTRON_STREAM_ENDPOINT}?sample_rate=16000&bit_rate=16&num_channels=1&use_language_asr_input={language}"
-
+    started_at = time.monotonic()
+    _active_websockets += 1
+    await websocket.accept()
     try:
         session_id = await persistence.start_session(
             clinic_id=clinic_id,
@@ -1978,60 +2036,164 @@ async def websocket_stream(websocket: WebSocket):
 
         async with websockets.connect(
             intron_url,
-            additional_headers={"Authorization": _intron_auth_header()}
+            additional_headers={"Authorization": _intron_auth_header()},
+            open_timeout=20,
         ) as intron_ws:
+            session_finished = asyncio.Event()
+            acknowledged_timestamps: dict[int, float] = {}
+            audio_buffer = bytearray()
+            audio_buffer_timestamp: float | None = None
+            pending_audio_timestamp: float | None = None
+            upstream_chunk_id = 0
+            last_audio_at = started_at
+
+            async def send_audio_chunk(chunk: bytes, timestamp: float | None) -> None:
+                nonlocal upstream_chunk_id
+                upstream_chunk_id += 1
+                if timestamp is not None:
+                    acknowledged_timestamps[upstream_chunk_id] = timestamp
+                await intron_ws.send(json.dumps({
+                    "message_type": "INPUT_AUDIO_CHUNK",
+                    "audio_base_64": base64.b64encode(chunk).decode("ascii"),
+                    "ack_id": upstream_chunk_id,
+                }))
 
             async def forward_browser_to_intron():
+                nonlocal last_audio_at, audio_buffer_timestamp, pending_audio_timestamp
                 try:
                     while True:
-                        data = await websocket.receive()
-                        if data.get("bytes") is not None:
-                            audio_b64 = base64.b64encode(data["bytes"]).decode("utf-8")
-                            await intron_ws.send(json.dumps({
-                                "message_type": "INPUT_AUDIO_CHUNK",
-                                "audio_base_64": audio_b64
-                            }))
+                        now = time.monotonic()
+                        session_remaining = STT_STREAM_MAX_SESSION_SECONDS - (now - started_at)
+                        idle_remaining = STT_STREAM_MAX_IDLE_SECONDS - (now - last_audio_at)
+                        if session_remaining <= 0:
+                            await websocket.send_json({"error": "STT stream exceeded the 300-second session limit"})
+                            return
+                        if idle_remaining <= 0:
+                            await websocket.send_json({"error": "STT stream exceeded the 60-second audio idle limit"})
+                            return
+                        try:
+                            data = await asyncio.wait_for(
+                                websocket.receive(),
+                                timeout=min(session_remaining, idle_remaining),
+                            )
+                        except asyncio.TimeoutError:
+                            continue
+
+                        if data["type"] == "websocket.disconnect":
+                            return
+
+                        audio_bytes = data.get("bytes")
+                        if audio_bytes is not None:
+                            if len(audio_bytes) % 2 or len(audio_bytes) > STT_STREAM_MAX_CHUNK_BYTES:
+                                await websocket.send_json({"error": "Audio frames must be even-length PCM16 and no larger than 32 KB"})
+                                return
+                            if not audio_bytes:
+                                continue
+                            last_audio_at = time.monotonic()
+                            audio_buffer.extend(audio_bytes)
+                            audio_buffer_timestamp = pending_audio_timestamp
+                            pending_audio_timestamp = None
+                            chunk = _take_stt_audio_chunk(audio_buffer)
+                            while chunk is not None:
+                                await send_audio_chunk(chunk, audio_buffer_timestamp)
+                                chunk = _take_stt_audio_chunk(audio_buffer)
                         elif data.get("text") is not None:
                             try:
                                 msg = json.loads(data["text"])
+                                if not isinstance(msg, dict):
+                                    continue
                                 if msg.get("type") == "audio_meta":
                                     timestamp_ms = msg.get("timestamp_ms")
                                     if isinstance(timestamp_ms, (int, float)) and not isinstance(timestamp_ms, bool):
-                                        await websocket.send_json({"ack_ts": timestamp_ms})
+                                        pending_audio_timestamp = timestamp_ms
                                 elif msg.get("event") == "stop":
+                                    chunk = _take_stt_audio_chunk(audio_buffer, final=True)
+                                    if chunk is not None:
+                                        await send_audio_chunk(chunk, audio_buffer_timestamp)
                                     await intron_ws.send(json.dumps({"message_type": "COMMIT"}))
+                                    remaining = max(0, STT_STREAM_MAX_SESSION_SECONDS - (time.monotonic() - started_at))
+                                    try:
+                                        await asyncio.wait_for(session_finished.wait(), timeout=remaining)
+                                    except asyncio.TimeoutError:
+                                        await websocket.send_json({"error": "STT stream exceeded the 300-second session limit"})
+                                    return
                             except json.JSONDecodeError:
-                                pass
+                                await websocket.send_json({"error": "Invalid STT stream control message"})
+                                return
                 except WebSocketDisconnect:
                     pass
 
             async def forward_intron_to_browser():
-                async for message in intron_ws:
-                    payload = json.loads(message)
-                    msg_type = payload.get("message_type")
-                    if msg_type == "PARTIAL_TRANSCRIPT":
-                        transcript = payload.get("transcript", "")
-                        queue_persistence(transcript, "partial")
-                        await websocket.send_json({"transcript": transcript, "session_id": session_id})
-                    elif msg_type == "COMMITTED_TRANSCRIPT":
-                        transcript = payload.get("transcript_text", "")
-                        queue_persistence(transcript, "final")
-                        await websocket.send_json({"transcript": transcript, "session_id": session_id})
-                    elif msg_type in ("ERROR", "INPUT_ERROR", "AUTHENTICATION_ERROR", "QUOTA_EXCEEDED"):
-                        await websocket.send_json({"error": payload.get("message", msg_type)})
+                try:
+                    async for message in intron_ws:
+                        if not isinstance(message, str):
+                            continue
+                        try:
+                            payload = json.loads(message)
+                        except json.JSONDecodeError:
+                            await websocket.send_json({"error": "Received an invalid response from Intron STT"})
+                            session_finished.set()
+                            return
+                        if not isinstance(payload, dict):
+                            continue
+
+                        msg_type = payload.get("message_type")
+                        if msg_type == "SESSION_CREATED":
+                            await websocket.send_json({
+                                "session_id": session_id,
+                                "provider_session_id": payload.get("session_id"),
+                                "persistence": persistence.backend,
+                                "configs": payload.get("configs"),
+                            })
+                        elif msg_type == "AUDIO_CHUNK_ACK":
+                            try:
+                                acknowledged_chunk_id = int(payload.get("chunk_id"))
+                            except (TypeError, ValueError):
+                                continue
+                            timestamp_ms = acknowledged_timestamps.get(acknowledged_chunk_id)
+                            if timestamp_ms is not None:
+                                await websocket.send_json({"ack_ts": timestamp_ms})
+                                for chunk_id in tuple(acknowledged_timestamps):
+                                    if chunk_id <= acknowledged_chunk_id:
+                                        acknowledged_timestamps.pop(chunk_id, None)
+                        elif msg_type == "PARTIAL_TRANSCRIPT":
+                            transcript = payload.get("transcript", "")
+                            if transcript:
+                                queue_persistence(transcript, "partial")
+                                await websocket.send_json({"transcript": transcript, "session_id": session_id})
+                        elif msg_type == "COMMITTED_TRANSCRIPT":
+                            transcript = payload.get("transcript_text", "")
+                            queue_persistence(transcript, "final")
+                            await websocket.send_json({"transcript": transcript, "session_id": session_id})
+                            session_finished.set()
+                            return
+                        elif msg_type in STT_STREAM_TERMINAL_MESSAGES:
+                            detail = payload.get("message") or payload.get("status") or msg_type
+                            await websocket.send_json({"error": detail, "message_type": msg_type})
+                            session_finished.set()
+                            return
+                except websockets.exceptions.ConnectionClosed as error:
+                    if not session_finished.is_set():
+                        await websocket.send_json({"error": f"Intron STT stream closed ({error.code})"})
+                finally:
+                    session_finished.set()
 
             forward_task = asyncio.create_task(forward_browser_to_intron())
             backward_task = asyncio.create_task(forward_intron_to_browser())
-            done, pending = await asyncio.wait(
-                [forward_task, backward_task], return_when=asyncio.FIRST_COMPLETED
-            )
-            for task in pending:
-                task.cancel()
+            try:
+                _, pending = await asyncio.wait(
+                    [forward_task, backward_task], return_when=asyncio.FIRST_COMPLETED
+                )
+            finally:
+                for task in (forward_task, backward_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(forward_task, backward_task, return_exceptions=True)
 
     except Exception as e:
         logger.error(f"Intron streaming bridge error: {e}")
         try:
-            await websocket.send_json({"error": str(e)})
+            await websocket.send_json({"error": "Unable to complete Intron STT stream"})
         except Exception:
             pass
     finally:
